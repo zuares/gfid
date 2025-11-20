@@ -34,3 +34,25 @@ php artisan migrate:fresh
  Lokasi File Backup:
  storage/backups/
 ============================================================
+
+
+# 🧱 LARAVEL MIGRATION (RAPI & TERPISAH)
+
+# 1. Buat tabel (CREATE TABLE)
+php artisan make:migration create_products_table
+
+# 2. Tambah kolom ke tabel (ADD COLUMN)
+php artisan make:migration add_stock_to_products_table --table=products
+
+# 3. Ubah kolom (CHANGE COLUMN)
+php artisan make:migration change_price_type_in_products_table --table=products
+
+# 4. Tambah foreign key (ADD FOREIGN KEY)
+php artisan make:migration add_user_id_foreign_to_products_table --table=products
+
+# 5. Hapus kolom (DROP COLUMN)
+php artisan make:migration drop_status_from_products_table --table=products
+
+# 6. Hapus tabel (DROP TABLE)
+php artisan make:migration drop_products_table --table=products
+
