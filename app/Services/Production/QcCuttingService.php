@@ -13,33 +13,46 @@ class QcCuttingService
 {
     public function __construct(
         protected InventoryService $inventory,
-    ) {}
+    ) {
+    }
 
     /**
-     * Simpan QC Cutting + apply inventory (sekali saja).
+     * Simpan hasil QC Cutting:
+     * - simpan / update qc_results per bundle
+     * - update qty_qc_ok / qty_qc_reject + status + WIP info di cutting_job_bundles
+     * - update status header CuttingJob
+     * - POST inventory: OUT RM LOT -> IN WIP-CUT (qty OK per bundle)
      *
-     * @param  CuttingJob  $job
-     * @param  array       $payload  (hasil $request->validate)
+     * Catatan:
+     *  - Saat ini diasumsikan QC final (sekali submit).
+     *    Kalau akan sering di-edit setelah inventory, nanti kita upgrade
+     *    supaya hitung delta qty OK.
      */
-    public function saveCuttingQc(CuttingJob $job, array $payload): CuttingJob
+    public function saveCuttingQc(CuttingJob $job, array $payload): void
     {
-        return DB::transaction(function () use ($job, $payload) {
-
+        DB::transaction(function () use ($job, $payload) {
             $qcDate = $payload['qc_date'];
             $operatorId = $payload['operator_id'] ?? null;
             $results = $payload['results'] ?? [];
 
-            // simpan qty_ok per bundle_id untuk dipakai saat stockIn WIP-CUT
-            $bundleQtyOk = [];
+            // map bundle by id biar gampang
+            /** @var \Illuminate\Support\Collection<int, CuttingJobBundle> $bundles */
+            $bundles = $job->bundles()->get()->keyBy('id');
+
+            // gudang tujuan WIP-CUT dipakai untuk WIP bundle + inventory
+            $wipCutWarehouseId = Warehouse::where('code', 'WIP-CUT')->value('id');
+            if (!$wipCutWarehouseId) {
+                throw new \RuntimeException('Warehouse WIP-CUT tidak ditemukan.');
+            }
+
+            $totalOk = 0.0;
+            $totalReject = 0.0;
 
             foreach ($results as $row) {
-                $bundleId = (int) ($row['bundle_id'] ?? 0);
-                if (!$bundleId) {
-                    continue;
-                }
+                $bundleId = (int) $row['bundle_id'];
 
                 /** @var CuttingJobBundle|null $bundle */
-                $bundle = $job->bundles()->whereKey($bundleId)->first();
+                $bundle = $bundles->get($bundleId);
                 if (!$bundle) {
                     continue;
                 }
@@ -47,37 +60,15 @@ class QcCuttingService
                 $qtyOk = $this->num($row['qty_ok'] ?? 0);
                 $qtyReject = $this->num($row['qty_reject'] ?? 0);
 
-                // jaga-jaga nilai negatif
-                if ($qtyOk < 0) {
-                    $qtyOk = 0;
-                }
-                if ($qtyReject < 0) {
-                    $qtyReject = 0;
-                }
-
-                // batasi jangan lebih besar dari qty_pcs bundle
-                if ($qtyOk > $bundle->qty_pcs) {
-                    $qtyOk = $bundle->qty_pcs;
-                }
-                if ($qtyReject > $bundle->qty_pcs) {
-                    $qtyReject = $bundle->qty_pcs;
+                // jangan sampai OK+Reject melebihi qty_pcs bundle
+                $max = (float) $bundle->qty_pcs;
+                if ($qtyOk + $qtyReject > $max && $max > 0) {
+                    $ratio = $max / ($qtyOk + $qtyReject);
+                    $qtyOk = round($qtyOk * $ratio, 2);
+                    $qtyReject = round($qtyReject * $ratio, 2);
                 }
 
-                // optional: pastikan qtyOk + qtyReject <= qty_pcs
-                if ($qtyOk + $qtyReject > $bundle->qty_pcs) {
-                    $qtyReject = max(0, $bundle->qty_pcs - $qtyOk);
-                }
-
-                // tentukan status QC per bundle
-                $status = 'pending';
-                if ($qtyOk > 0 && $qtyReject <= 0) {
-                    $status = 'ok';
-                } elseif ($qtyOk > 0 && $qtyReject > 0) {
-                    $status = 'mixed';
-                } elseif ($qtyOk <= 0 && $qtyReject > 0) {
-                    $status = 'reject';
-                }
-                // upsert qc_results (stage = cutting)
+                // simpan / update qc_results (1 row per bundle & stage cutting)
                 QcResult::updateOrCreate(
                     [
                         'stage' => 'cutting',
@@ -89,102 +80,154 @@ class QcCuttingService
                         'qty_ok' => $qtyOk,
                         'qty_reject' => $qtyReject,
                         'operator_id' => $operatorId,
-                        'status' => $status,
+                        'status' => $this->decideBundleQcStatus($qtyOk, $qtyReject),
                         'notes' => $row['notes'] ?? null,
                     ]
                 );
 
-                $bundleQtyOk[$bundle->id] = $qtyOk;
-            }
+                // tentukan status bundle
+                $bundleStatus = $this->decideBundleQcStatus($qtyOk, $qtyReject);
 
-            // Inventory hanya diaplikasikan SEKALI,
-            // misalnya ketika status awal masih 'cut'
-            if ($job->status === 'sent_to_qc') {
-                $this->applyInventoryAfterQc($job, $qcDate, $bundleQtyOk);
+                // siapkan info WIP untuk bundle
+                $wipWarehouseId = null;
+                $wipQty = 0.0;
 
-                $job->update([
-                    'status' => 'qc_done',
+                if ($qtyOk > 0) {
+                    $wipWarehouseId = $wipCutWarehouseId;
+                    $wipQty = $qtyOk; // qty siap jahit
+                }
+
+                // update ringkasan di bundle (+ info WIP)
+                $bundle->update([
+                    'qty_qc_ok' => $qtyOk,
+                    'qty_qc_reject' => $qtyReject,
+                    'status' => $bundleStatus,
+                    'wip_warehouse_id' => $wipWarehouseId,
+                    'wip_qty' => $wipQty,
                 ]);
+
+                // === POST INVENTORY untuk qty OK (WIP-CUT) ===
+                // NOTE: diasumsikan 1x posting; kalau QC di-edit ulang,
+                // stok bisa dobel. Kalau nanti perlu, kita ubah jadi pakai selisih.
+                $this->postBundleToWipCut($job, $bundle, $qtyOk, $qcDate, $wipCutWarehouseId);
+
+                $totalOk += $qtyOk;
+                $totalReject += $qtyReject;
             }
 
-            // reload relasi QC biar fresh
-            return $job->fresh([
-                'bundles.qcResults' => function ($q) {
-                    $q->where('stage', 'cutting');
-                },
-            ]);
+            // update status header cutting job berdasar status semua bundle
+            $this->updateJobStatusFromBundles($job);
         });
     }
 
     /**
-     * Kurangi LOT di RM + buat stok WIP-CUT per bundle (qty_ok).
+     * Posting inventory per bundle:
+     * - Stock OUT dari gudang RM (LOT kain)
+     * - Stock IN ke gudang WIP-CUT (item hasil cutting / WIP)
      *
-     * - stockOut(RM, LOT kain, total pemakaian kain)
-     * - stockIn(CUT, item hasil cutting per bundle, qty_ok)
-     *
-     * Moving average per LOT akan dikerjakan di dalam InventoryService
-     * karena unitCost kita kirim null.
+     * Qty = qtyOk (hasil OK QC Cutting)
      */
-    protected function applyInventoryAfterQc(
+    protected function postBundleToWipCut(
         CuttingJob $job,
-        string | \DateTimeInterface $qcDate,
-        array $bundleQtyOk
+        CuttingJobBundle $bundle,
+        float $qtyOk,
+        string $qcDate,
+        int $wipCutWarehouseId,
     ): void {
-        // 1. total pemakaian kain dari semua bundle
-        $qtyFabricUsed = $job->bundles()->sum('qty_used_fabric');
-        if ($qtyFabricUsed <= 0) {
+        if ($qtyOk <= 0) {
             return;
         }
 
-        // 2. ambil gudang RM & CUT (sesuaikan kode kalau beda)
-        $rmWarehouseId = Warehouse::where('code', 'RM')->value('id');
-        $wipCutWarehouseId = Warehouse::where('code', 'WIP-CUT')->value('id'); // anggap 'CUT' = WIP Cutting
-        if (!$rmWarehouseId || !$wipCutWarehouseId) {
-            // Bisa juga lempar exception kalau mau dipaksa benar
-            return;
+        // gudang asal = gudang RM yang dipakai Cutting Job
+        $rmWarehouseId = $job->warehouse_id;
+
+        if (!$bundle->lot) {
+            throw new \RuntimeException("Bundle {$bundle->id} tidak memiliki LOT.");
         }
 
-        // 3. item kain sumber LOT
-        $fabricItemId = $job->fabric_item_id ?? $job->lot?->item_id;
-        if (!$fabricItemId) {
-            return;
-        }
-
-        // 4. STOCK OUT kain dari gudang RM per LOT
+        // ============================
+        // 1) STOCK OUT dari RM (LOT)
+        // ============================
         $this->inventory->stockOut(
             warehouseId: $rmWarehouseId,
-            itemId: $fabricItemId,
-            qty: $qtyFabricUsed,
+            itemId: $bundle->lot->item_id, // kain mentah
+            qty: $qtyOk,
             date: $qcDate,
-            sourceType: 'cutting_qc',
+            sourceType: 'cutting_qc_out',
             sourceId: $job->id,
-            notes: "Pemakaian kain cutting job {$job->code}",
-            lotId: $job->lot_id,
+            notes: "QC Cutting OUT RM untuk bundle {$bundle->bundle_code} (job {$job->code})",
+            allowNegative: false,
+            lotId: $bundle->lot_id,
         );
 
-        // 5. STOCK IN WIP-CUT per bundle (hanya qty_ok)
-        foreach ($job->bundles as $bundle) {
-            $qtyOk = $bundleQtyOk[$bundle->id] ?? 0;
-            if ($qtyOk <= 0) {
-                continue;
-            }
-
-            $this->inventory->stockIn(
-                warehouseId: $wipCutWarehouseId,
-                itemId: $bundle->finished_item_id, // barang setengah jadi hasil cutting
-                qty: $qtyOk,
-                date: $qcDate,
-                sourceType: 'cutting_qc',
-                sourceId: $job->id,
-                notes: "WIP Cutting untuk bundle {$bundle->bundle_code} (job {$job->code})",
-                lotId: null,
-                unitCost: null, // << biar InventoryService pakai moving average LOT
-            );
-        }
+        // ============================
+        // 2) STOCK IN ke WIP-CUT
+        // ============================
+        $this->inventory->stockIn(
+            warehouseId: $wipCutWarehouseId,
+            itemId: $bundle->finished_item_id, // barang WIP hasil cutting
+            qty: $qtyOk,
+            date: $qcDate,
+            sourceType: 'cutting_qc_in',
+            sourceId: $job->id,
+            notes: "QC Cutting IN WIP-CUT untuk bundle {$bundle->bundle_code} (job {$job->code})",
+            lotId: $bundle->lot_id, // tetap pakai LOT kain untuk traceability cost
+            unitCost: null, // null => InventoryService TIDAK mencatat cost baru (pakai avg LOT existing)
+        );
     }
 
     /**
-     * Normalisasi angka (mirip di CuttingService).
+     * Tentukan status bundle berdasarkan qty OK & Reject.
+     */
+    protected function decideBundleQcStatus(float $qtyOk, float $qtyReject): string
+    {
+        if ($qtyReject <= 0 && $qtyOk > 0) {
+            return 'qc_ok';
+        }
+
+        if ($qtyOk > 0 && $qtyReject > 0) {
+            return 'qc_mixed';
+        }
+
+        if ($qtyOk <= 0 && $qtyReject > 0) {
+            return 'qc_reject';
+        }
+
+        // tidak ada data QC yang bermakna -> balik ke status awal
+        return 'cut';
+    }
+
+    /**
+     * Update status header CuttingJob berdasarkan status bundle-bundle.
+     */
+    protected function updateJobStatusFromBundles(CuttingJob $job): void
+    {
+        $job->loadMissing('bundles');
+
+        $bundles = $job->bundles;
+        if ($bundles->isEmpty()) {
+            return;
+        }
+
+        $allOk = $bundles->every(fn($b) => $b->status === 'qc_ok');
+        $allReject = $bundles->every(fn($b) => $b->status === 'qc_reject');
+
+        if ($allOk) {
+            $status = 'qc_ok';
+        } elseif ($allReject) {
+            $status = 'qc_reject';
+        } else {
+            $status = 'qc_mixed';
+        }
+
+        // kalau sebelumnya statusnya cut_sent_to_qc, boleh diganti ke hasil qc
+        $job->update([
+            'status' => $status,
+        ]);
+    }
+
+    /**
+     * Normalisasi angka (format Indonesia juga).
      */
     protected function num(float | int | string | null $value): float
     {
@@ -199,10 +242,10 @@ class QcCuttingService
         $value = trim((string) $value);
         $value = str_replace(' ', '', $value);
 
-        // format Indonesia 1.234,56
+        // format Indonesia: 1.234,56
         if (strpos($value, ',') !== false) {
-            $value = str_replace('.', '', $value);
-            $value = str_replace(',', '.', $value);
+            $value = str_replace('.', '', $value); // buang titik ribuan
+            $value = str_replace(',', '.', $value); // koma -> titik
         }
 
         return (float) $value;

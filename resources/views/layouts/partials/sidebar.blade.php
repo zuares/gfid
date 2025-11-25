@@ -15,6 +15,10 @@
 
     // Production QC (cutting / sewing nanti)
     $prodQcOpen = request()->routeIs('production.qc.*');
+
+    // Production Sewing (pickups + returns)
+    $prodSewOpen =
+        request()->routeIs('production.sewing_pickups.*') || request()->routeIs('production.sewing_returns.*');
 @endphp
 
 <style>
@@ -362,6 +366,45 @@
             </div>
         </li>
 
+        {{-- GROUP: Sewing (Pickups + Returns) --}}
+        <li class="mb-1">
+            <button class="sidebar-link sidebar-toggle {{ $prodSewOpen ? 'is-open' : '' }}" type="button"
+                data-bs-toggle="collapse" data-bs-target="#navProductionSewing"
+                aria-expanded="{{ $prodSewOpen ? 'true' : 'false' }}" aria-controls="navProductionSewing">
+                <span class="icon">🧵</span>
+                <span>Sewing</span>
+                <span class="chevron">▸</span>
+            </button>
+
+            <div class="collapse {{ $prodSewOpen ? 'show' : '' }}" id="navProductionSewing">
+                {{-- Sewing Pickups --}}
+                <a href="{{ route('production.sewing_pickups.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_pickups.index') ? 'active' : '' }}">
+                    <span class="icon">📤</span>
+                    <span>Sewing Pickups</span>
+                </a>
+
+                <a href="{{ route('production.sewing_pickups.create') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_pickups.create') ? 'active' : '' }}">
+                    <span class="icon">＋</span>
+                    <span>Pickup Baru</span>
+                </a>
+
+                {{-- Sewing Returns --}}
+                <a href="{{ route('production.sewing_returns.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_returns.index') ? 'active' : '' }}">
+                    <span class="icon">📥</span>
+                    <span>Sewing Returns</span>
+                </a>
+
+                <a href="{{ route('production.sewing_returns.create') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_returns.create') ? 'active' : '' }}">
+                    <span class="icon">＋</span>
+                    <span>Return Baru</span>
+                </a>
+            </div>
+        </li>
+
         {{-- GROUP: Production QC --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $prodQcOpen ? 'is-open' : '' }}" type="button"
@@ -380,21 +423,14 @@
                     <span>QC Cutting</span>
                 </a>
 
-                {{-- Placeholder untuk nanti:
+                {{-- Placeholder untuk nanti QC Sewing --}}
+                {{--
                 <a href="#" class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.qc.sewing.*') ? 'active' : '' }}">
                     <span class="icon">🧵</span>
                     <span>QC Sewing</span>
                 </a>
                 --}}
             </div>
-        </li>
-
-        {{-- Placeholder Finishing (nanti bisa dibikin collapse juga) --}}
-        <li>
-            <a href="#" class="sidebar-link">
-                <span class="icon">🧵</span>
-                <span>Finishing</span>
-            </a>
         </li>
 
         {{-- FINANCE --}}

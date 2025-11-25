@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\CuttingJob;
 use App\Models\Employee;
 use App\Models\QcResult;
-use App\Models\SewingReturn;
 use App\Services\Production\QcCuttingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -39,23 +38,25 @@ class QcController extends Controller
                 break;
 
             case 'sewing':
-                // List semua Sewing Return (hasil QC Sewing)
-                $records = SewingReturn::query()
-                    ->with([
-                        'operator',
-                        'lines.pickupLine.pickup.warehouse',
-                        'lines.pickupLine.bundle.finishedItem',
-                        'lines.pickupLine.bundle.cuttingJob.lot.item',
-                    ])
-                    ->orderByDesc('date')
-                    ->orderByDesc('id')
-                    ->paginate(20)
-                    ->withQueryString();
+                // TODO: sesuaikan dengan model SewingJob kamu
+                // $records = SewingJob::query()
+                //     ->with([...])
+                //     ->whereHas('qcResults', fn ($q) => $q->where('stage', 'sewing'))
+                //     ->orderByDesc('date')
+                //     ->orderByDesc('id')
+                //     ->paginate(20)
+                //     ->withQueryString();
                 break;
 
             case 'packing':
-                // Nanti diisi dengan model PackingJob / PackingReturn
-                // $records = ...
+                // TODO: sesuaikan dengan model PackingJob kamu
+                // $records = PackingJob::query()
+                //     ->with([...])
+                //     ->whereHas('qcResults', fn ($q) => $q->where('stage', 'packing'))
+                //     ->orderByDesc('date')
+                //     ->orderByDesc('id')
+                //     ->paginate(20)
+                //     ->withQueryString();
                 break;
         }
 

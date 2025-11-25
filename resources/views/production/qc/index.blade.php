@@ -36,7 +36,7 @@
 
         .badge-soft {
             border-radius: 999px;
-            padding: .15rem .5rem;
+            padding: .17rem .5rem;
             font-size: .7rem;
         }
     </style>
@@ -81,17 +81,22 @@
 
         {{-- ISI TABEL PER STAGE --}}
         <div class="card p-3">
+
+            {{-- =======================
+                 TAB QC CUTTING
+            ======================== --}}
             @if ($stage === 'cutting')
                 <h2 class="h6 mb-2">Daftar QC Cutting</h2>
+
                 <div class="table-wrap">
                     <table class="table table-sm align-middle mono">
                         <thead>
                             <tr>
                                 <th style="width: 40px;">#</th>
                                 <th style="width: 110px;">Tanggal</th>
-                                <th style="width: 220px;">Lot</th>
-                                <th style="width: 180px;">Bundles (Qty)</th>
-                                <th style="width: 140px;">Status</th>
+                                <th style="width: 200px;">Lot</th>
+                                <th style="width: 160px;">Bundles (Qty)</th>
+                                <th style="width: 120px;">Status</th>
                                 <th style="width: 90px;"></th>
                             </tr>
                         </thead>
@@ -101,36 +106,31 @@
                                     $totalBundles = $job->bundles->count();
                                     $totalQty = $job->bundles->sum('qty_pcs');
 
-                                    // mapping status → label + warna badge
+                                    // status badge
                                     $rawStatus = $job->status ?? '-';
 
-                                    if ($rawStatus === 'sent_to_qc') {
-                                        $statusLabel = 'Belum QC';
+                                    if ($rawStatus === 'cut_sent_to_qc') {
+                                        $statusLabel = 'BELUM QC';
                                         $statusClass = 'warning';
                                     } else {
                                         $map = [
-                                            'cut' => ['label' => 'CUT', 'class' => 'primary'],
-                                            'cut_qc_done' => ['label' => 'QC CUTTING', 'class' => 'info'],
-                                            'qc_ok' => ['label' => 'QC OK', 'class' => 'success'],
-                                            'qc_mixed' => ['label' => 'QC MIXED', 'class' => 'warning'],
-                                            'qc_reject' => ['label' => 'QC REJECT', 'class' => 'danger'],
+                                            'cut' => ['CUT', 'secondary'],
+                                            'cut_qc_done' => ['QC DONE', 'info'],
+                                            'qc_ok' => ['QC OK', 'success'],
+                                            'qc_mixed' => ['QC MIXED', 'warning'],
+                                            'qc_reject' => ['QC REJECT', 'danger'],
                                         ];
-
-                                        $cfg = $map[$rawStatus] ?? [
-                                            'label' => strtoupper($rawStatus),
-                                            'class' => 'secondary',
-                                        ];
-                                        $statusLabel = $cfg['label'];
-                                        $statusClass = $cfg['class'];
+                                        $cfg = $map[$rawStatus] ?? [strtoupper($rawStatus), 'secondary'];
+                                        $statusLabel = $cfg[0];
+                                        $statusClass = $cfg[1];
                                     }
                                 @endphp
                                 <tr>
                                     <td>{{ $loop->iteration + ($records->currentPage() - 1) * $records->perPage() }}</td>
                                     <td>{{ $job->date?->format('Y-m-d') ?? $job->date }}</td>
                                     <td>
-                                        <div class="fw-semibold">
-                                            {{ $job->lot?->item?->code ?? '-' }}
-                                        </div>
+                                        {{-- Nama item Lot + badge kecil kode LOT --}}
+                                        {{ $job->lot?->item?->code ?? '-' }}
                                         @if ($job->lot)
                                             <span class="badge-soft bg-light border text-muted">
                                                 {{ $job->lot->code }}
@@ -169,17 +169,117 @@
                         {{ $records->links() }}
                     </div>
                 @endif
+
+                {{-- =======================
+                 TAB QC SEWING
+            ======================== --}}
             @elseif ($stage === 'sewing')
                 <h2 class="h6 mb-2">Daftar QC Sewing</h2>
-                <p class="small text-muted mb-0">
-                    Struktur QC Sewing akan mengikuti pola yang sama seperti Cutting.
-                    Tinggal ganti query di controller ke model <code>SewingJob</code>.
-                </p>
+
+                <div class="table-wrap">
+                    <table class="table table-sm align-middle mono">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">#</th>
+                                <th style="width: 130px;">Return Code</th>
+                                <th style="width: 110px;">Tanggal</th>
+                                <th style="width: 140px;">Pickup Code</th>
+                                <th style="width: 160px;">Gudang Sewing</th>
+                                <th style="width: 170px;">Operator Jahit</th>
+                                <th style="width: 130px;">Bundles</th>
+                                <th style="width: 130px;">Qty OK</th>
+                                <th style="width: 130px;">Qty Reject</th>
+                                <th style="width: 110px;">Status</th>
+                                <th style="width: 90px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($records as $ret)
+                                @php
+                                    $lines = $ret->lines;
+                                    $totalBundles = $lines->count();
+                                    $qtyOk = $lines->sum('qty_ok');
+                                    $qtyReject = $lines->sum('qty_reject');
+
+                                    $firstLine = $lines->first();
+                                    $pickupLine = $firstLine?->pickupLine;
+                                    $pickup = $pickupLine?->pickup;
+                                    $warehouse = $pickup?->warehouse;
+
+                                    $statusMap = [
+                                        'draft' => ['DRAFT', 'secondary'],
+                                        'posted' => ['POSTED', 'primary'],
+                                        'closed' => ['CLOSED', 'success'],
+                                    ];
+                                    $cfg = $statusMap[$ret->status] ?? [strtoupper($ret->status ?? '-'), 'secondary'];
+                                @endphp
+                                <tr>
+                                    <td>{{ $loop->iteration + ($records->currentPage() - 1) * $records->perPage() }}</td>
+                                    <td>{{ $ret->code }}</td>
+                                    <td>{{ $ret->date?->format('Y-m-d') ?? $ret->date }}</td>
+                                    <td>{{ $pickup?->code ?? '-' }}</td>
+                                    <td>
+                                        {{ $warehouse?->code ?? '-' }}
+                                        @if ($warehouse)
+                                            <span class="badge-soft bg-light border text-muted">
+                                                {{ $warehouse->name }}
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if ($ret->operator)
+                                            {{ $ret->operator->code }} — {{ $ret->operator->name }}
+                                        @else
+                                            -
+                                        @endif
+                                    </td>
+                                    <td>{{ $totalBundles }} bundle</td>
+                                    <td>{{ number_format($qtyOk, 2, ',', '.') }}</td>
+                                    <td>{{ number_format($qtyReject, 2, ',', '.') }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ $cfg[1] }}">
+                                            {{ $cfg[0] }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (Route::has('production.sewing_returns.show'))
+                                            <a href="{{ route('production.sewing_returns.show', $ret) }}"
+                                                class="btn btn-sm btn-outline-primary">
+                                                Detail
+                                            </a>
+                                        @elseif ($pickup && Route::has('production.sewing_pickups.show'))
+                                            <a href="{{ route('production.sewing_pickups.show', $pickup) }}"
+                                                class="btn btn-sm btn-outline-primary">
+                                                Pickup
+                                            </a>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="11" class="text-center text-muted small">
+                                        Belum ada data QC Sewing.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                @if ($records instanceof \Illuminate\Pagination\AbstractPaginator)
+                    <div class="mt-2">
+                        {{ $records->links() }}
+                    </div>
+                @endif
+
+                {{-- =======================
+                 TAB QC PACKING
+            ======================== --}}
             @elseif ($stage === 'packing')
                 <h2 class="h6 mb-2">Daftar QC Packing</h2>
                 <p class="small text-muted mb-0">
-                    Struktur QC Packing akan mengikuti pola yang sama seperti Cutting.
-                    Tinggal ganti query di controller ke model <code>PackingJob</code>.
+                    Modul QC Packing belum diimplementasikan. Nanti bisa mengikuti pola QC Sewing dengan model
+                    <code>PackingReturn</code> atau sejenisnya.
                 </p>
             @endif
         </div>

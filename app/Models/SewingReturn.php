@@ -1,0 +1,39 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class SewingReturn extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'code',
+        'date',
+        'warehouse_id',
+        'operator_id',
+        'status',
+        'notes',
+    ];
+
+    protected $casts = [
+        'date' => 'date',
+    ];
+
+    public function lines()
+    {
+        return $this->hasMany(SewingReturnLine::class);
+    }
+
+    public function operator()
+    {
+        return $this->belongsTo(Employee::class, 'operator_id');
+    }
+
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class, 'warehouse_id');
+    }
+}
