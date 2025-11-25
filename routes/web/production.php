@@ -21,6 +21,9 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/{cuttingJob}', [CuttingJobController::class, 'show'])
                 ->name('show');
 
+            Route::post('/{cuttingJob}/send-to-qc', [CuttingJobController::class, 'sendToQc'])
+                ->name('send_to_qc');
+
             // >>> EDIT & UPDATE HASIL CUTTING <<<
             Route::get('/{cuttingJob}/edit', [CuttingJobController::class, 'edit'])
                 ->name('edit');
@@ -31,20 +34,18 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth'])->group(function () {
+    // INDEX QC SEMUA STAGE
+    Route::get('/production/qc', [QcController::class, 'index'])
+        ->name('production.qc.index');
 
+    // QC Cutting existing (punyamu sekarang)
     Route::prefix('production/qc')
         ->name('production.qc.')
         ->group(function () {
-
-            // QC Cutting
             Route::get('/cutting/{cuttingJob}/edit', [QcController::class, 'editCutting'])
                 ->name('cutting.edit');
 
             Route::put('/cutting/{cuttingJob}', [QcController::class, 'updateCutting'])
                 ->name('cutting.update');
-
-            // nanti bisa tambah:
-            // Route::get('/sewing/{sewingJob}/edit', [...])->name('sewing.edit');
-            // Route::put('/sewing/{sewingJob}', [...])->name('sewing.update');
         });
 });

@@ -5,18 +5,66 @@ namespace App\Http\Controllers\Production;
 use App\Http\Controllers\Controller;
 use App\Models\CuttingJob;
 use App\Models\Employee;
-use App\Models\InventoryStock;
 use App\Models\QcResult;
-use App\Models\Warehouse;
-use App\Services\Inventory\InventoryService;
+use App\Services\Production\QcCuttingService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class QcController extends Controller
 {
     public function __construct(
-        protected InventoryService $inventory,
+        protected QcCuttingService $qcCutting,
     ) {}
+
+    public function index(Request $request)
+    {
+        $stage = $request->get('stage', 'cutting'); // default cutting
+
+        if (!in_array($stage, ['cutting', 'sewing', 'packing'], true)) {
+            $stage = 'cutting';
+        }
+
+        $records = collect();
+
+        switch ($stage) {
+            case 'cutting':
+                $records = CuttingJob::query()
+                    ->with(['warehouse', 'lot.item', 'bundles.finishedItem', 'bundles.qcResults'])
+                    ->where('status', 'sent_to_qc') // << utama
+                    ->orderByDesc('date')
+                    ->orderByDesc('id')
+                    ->paginate(20)
+                    ->withQueryString();
+                break;
+
+            case 'sewing':
+                // TODO: sesuaikan dengan model SewingJob kamu
+                // $records = SewingJob::query()
+                //     ->with([...])
+                //     ->whereHas('qcResults', fn ($q) => $q->where('stage', 'sewing'))
+                //     ->orderByDesc('date')
+                //     ->orderByDesc('id')
+                //     ->paginate(20)
+                //     ->withQueryString();
+                break;
+
+            case 'packing':
+                // TODO: sesuaikan dengan model PackingJob kamu
+                // $records = PackingJob::query()
+                //     ->with([...])
+                //     ->whereHas('qcResults', fn ($q) => $q->where('stage', 'packing'))
+                //     ->orderByDesc('date')
+                //     ->orderByDesc('id')
+                //     ->paginate(20)
+                //     ->withQueryString();
+                break;
+        }
+
+        return view('production.qc.index', [
+            'stage' => $stage,
+            'records' => $records,
+        ]);
+    }
 
     /**
      * Form QC untuk satu Cutting Job (stage = cutting)
@@ -54,19 +102,19 @@ class QcController extends Controller
             ];
         }
 
-        // Operator QC
-        // sementara: kalau belum ada role 'qc', tetap pakai role 'cutting'
-        $operators = Employee::query()
-            ->whereIn('role', ['qc', 'cutting']) // nanti bisa ganti hanya ['qc']
-            ->orderBy('code')
-            ->get();
+        // Operator QC: otomatis dari user login
+        // Asumsi: User punya relasi employee -> sesuaikan kalau nama relasinya beda
+        $loginOperator = null;
+        if (auth()->check() && method_exists(auth()->user(), 'employee')) {
+            $loginOperator = auth()->user()->employee;
+        }
 
         $hasQcCutting = $existingQc->isNotEmpty();
 
         return view('production.qc.cutting_edit', [
             'job' => $cuttingJob,
             'rows' => $rows,
-            'operators' => $operators,
+            'loginOperator' => $loginOperator,
             'hasQcCutting' => $hasQcCutting,
         ]);
     }
@@ -74,172 +122,38 @@ class QcController extends Controller
     /**
      * Simpan hasil QC Cutting
      */
+
     public function updateCutting(Request $request, CuttingJob $cuttingJob)
     {
         $validated = $request->validate([
             'qc_date' => ['required', 'date'],
+
+            // operator QC diambil dari form — kalau mau otomatis operator login ganti nanti
             'operator_id' => ['nullable', 'exists:employees,id'],
+
             'results' => ['required', 'array', 'min:1'],
             'results.*.bundle_id' => ['required', 'exists:cutting_job_bundles,id'],
-            'results.*.qty_reject' => ['nullable', 'integer', 'min:0'],
+            'results.*.qty_ok' => ['nullable', 'numeric', 'min:0'],
+            'results.*.qty_reject' => ['nullable', 'numeric', 'min:0'],
             'results.*.notes' => ['nullable', 'string'],
+        ], [
+            'qc_date.required' => 'Tanggal QC wajib diisi.',
+            'results.required' => 'Minimal 1 baris QC harus diisi.',
+            'results.*.bundle_id.required' => 'Bundle tidak valid.',
         ]);
 
-        // simpan status lama untuk deteksi "posting pertama kali"
-        $oldStatus = $cuttingJob->status;
+        // ✔ Simpan QC hasil per bundle ke dalam database
+        $this->qcCutting->saveCuttingQc($cuttingJob, $validated);
 
-        DB::transaction(function () use ($validated, $cuttingJob, $oldStatus) {
-
-            $qcDate = $validated['qc_date'];
-            $operatorId = $validated['operator_id'] ?? null;
-
-            // mapping bundle
-            $bundleMap = $cuttingJob->bundles()->get()->keyBy('id');
-            $bundleOkMap = [];
-
-            foreach ($validated['results'] as $row) {
-
-                /** @var \App\Models\CuttingJobBundle|null $bundle */
-                $bundle = $bundleMap->get((int) $row['bundle_id']);
-                if (!$bundle) {
-                    continue;
-                }
-
-                $qtyBundle = (int) $bundle->qty_pcs;
-                $rej = max(0, (int) ($row['qty_reject'] ?? 0));
-                if ($rej > $qtyBundle) {
-                    $rej = $qtyBundle;
-                }
-
-                $ok = $qtyBundle - $rej;
-
-                // status QC per bundle
-                if ($ok > 0 && $rej === 0) {
-                    $qcStatus = 'ok';
-                    $bundleStatus = 'qc_ok';
-                } elseif ($ok === 0 && $rej > 0) {
-                    $qcStatus = 'reject';
-                    $bundleStatus = 'qc_reject';
-                } else {
-                    $qcStatus = 'mixed';
-                    $bundleStatus = 'qc_mixed';
-                }
-
-                // save / update QC
-                QcResult::updateOrCreate(
-                    [
-                        'stage' => 'cutting',
-                        'cutting_job_id' => $cuttingJob->id,
-                        'cutting_job_bundle_id' => $bundle->id,
-                    ],
-                    [
-                        'qc_date' => $qcDate,
-                        'qty_ok' => $ok,
-                        'qty_reject' => $rej,
-                        'operator_id' => $operatorId,
-                        'status' => $qcStatus,
-                        'notes' => $row['notes'] ?? null,
-                    ]
-                );
-
-                // update status bundle
-                $bundle->update(['status' => $bundleStatus]);
-
-                // simpan qty OK per bundle untuk stockIn WIP
-                $bundleOkMap[$bundle->id] = $ok;
-            }
-
-            // STATUS JOB GLOBAL
-            $statuses = $cuttingJob->bundles()->pluck('status');
-
-            if ($statuses->every(fn($s) => $s === 'qc_ok')) {
-                $cuttingJob->status = 'qc_ok';
-            } elseif ($statuses->every(fn($s) => $s === 'qc_reject')) {
-                $cuttingJob->status = 'qc_reject';
-            } elseif ($statuses->contains('qc_ok') && $statuses->contains('qc_reject')) {
-                $cuttingJob->status = 'qc_mixed';
-            } else {
-                // masih ada yang 'cut' atau kombinasi lain
-                $cuttingJob->status = 'cut';
-            }
-
-            $cuttingJob->save();
-
-            /**
-             * ==========================
-             *   INVENTORY MUTATION
-             * ==========================
-             *
-             * Jalan hanya SEKALI:
-             * - kalau status lama masih "belum pernah dipost" (cut/null/'')
-             * - dan status baru SUDAH bukan 'cut'
-             */
-            if (
-                in_array($oldStatus, ['cut', null, ''], true)
-                && $cuttingJob->status !== 'cut'
-            ) {
-                //---------------------------------------------------
-                // 1) STOCK OUT LOT (buang semua saldo LOT di gudang job)
-                //---------------------------------------------------
-                $cuttingJob->loadMissing('lot');
-                $lot = $cuttingJob->lot;
-
-                if ($lot) {
-                    // total saldo LOT di gudang job ini
-                    $qtyLot = (float) InventoryStock::query()
-                        ->where('lot_id', $lot->id)
-                        ->where('warehouse_id', $cuttingJob->warehouse_id)
-                        ->sum('qty_balance');
-
-                    if ($qtyLot > 0) {
-                        $this->inventory->stockOut(
-                            $cuttingJob->warehouse_id,
-                            $lot->item_id,
-                            $qtyLot,
-                            $qcDate,
-                            'qc_cutting_lot',
-                            $cuttingJob->id,
-                            'Pemakaian LOT untuk Cutting Job ' . $cuttingJob->code,
-                            $lot->id,
-                        );
-                    }
-                }
-
-                //---------------------------------------------------
-                // 2) STOCK IN WIP CUTTING (per bundle OK)
-                //---------------------------------------------------
-                $wip = Warehouse::where('code', 'WIP-CUT')->first();
-
-                if ($wip) {
-                    foreach ($bundleOkMap as $bundleId => $okQty) {
-                        if ($okQty <= 0) {
-                            continue;
-                        }
-
-                        /** @var \App\Models\CuttingJobBundle|null $bundle */
-                        $bundle = $bundleMap->get($bundleId);
-                        if (!$bundle) {
-                            continue;
-                        }
-
-                        $this->inventory->stockIn(
-                            $wip->id,
-                            $bundle->finished_item_id,
-                            $okQty,
-                            $qcDate,
-                            'qc_cutting_ok',
-                            $cuttingJob->id,
-                            'Hasil QC Cutting ' . $bundle->bundle_code,
-                            null, // WIP tidak pakai LOT
-                        );
-                    }
-                }
-            }
-        });
+        // ✔ UPDATE STATUS CUTTING JOB → qc_done
+        $cuttingJob->update([
+            'status' => 'qc_done',
+            'created_by' => $validated['operator_id'] ?? auth()->id(), // sebagai fallback
+        ]);
 
         return redirect()
             ->route('production.cutting_jobs.show', $cuttingJob)
-            ->with('success', 'QC Cutting berhasil disimpan.');
+            ->with('success', 'QC Cutting berhasil disimpan. Status berubah menjadi QC_DONE.');
     }
 
 }

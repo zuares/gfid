@@ -49,6 +49,12 @@
     @php
         $lot = $job->lot;
         $warehouse = $job->warehouse;
+
+        // Default operator dari user login (kalau ada)
+        $defaultOperatorId = old('operator_id', $loginOperator->id ?? null);
+        $defaultOperatorLabel = $loginOperator
+            ? ($loginOperator->code ?? 'OP') . ' — ' . ($loginOperator->name ?? 'Operator')
+            : 'User login';
     @endphp
 
     <div class="page-wrap">
@@ -107,20 +113,20 @@
 
                     <div class="col-md-4 col-12">
                         <label class="form-label">Operator QC</label>
-                        <select name="operator_id" class="form-select @error('operator_id') is-invalid @enderror">
-                            <option value="">Pilih operator QC…</option>
-                            @foreach ($operators as $op)
-                                <option value="{{ $op->id }}" @selected(old('operator_id') == $op->id)>
-                                    {{ $op->code }} — {{ $op->name }}
-                                </option>
-                            @endforeach
-                        </select>
+
+                        {{-- hidden supaya operator_id tetap terkirim --}}
+                        <input type="hidden" name="operator_id" value="{{ $defaultOperatorId }}">
+
+                        {{-- tampilan hanya-baca, di-disable --}}
+                        <input type="text" class="form-control @error('operator_id') is-invalid @enderror"
+                            value="{{ $defaultOperatorLabel }}" disabled>
+
                         @error('operator_id')
-                            <div class="invalid-feedback">{{ $message }}</div>
+                            <div class="invalid-feedback d-block">{{ $message }}</div>
                         @enderror
+
                         <div class="help mt-1">
-                            Bisa dipakai sama dengan operator cutting dulu; nanti kalau ada role <code>qc</code> tinggal
-                            ganti query.
+                            Operator otomatis diisi user yang sedang login.
                         </div>
                     </div>
 
@@ -265,7 +271,6 @@
         function attachSelectAllOnFocus(input) {
             // saat fokus, select semua isi
             input.addEventListener('focus', function() {
-                // delay dikit biar jalan juga di mobile
                 setTimeout(() => this.select(), 0);
             });
 
@@ -286,20 +291,16 @@
                 const okCell = tr.querySelector('.cell-ok');
                 const maxBundle = parseInt(rejInput.dataset.bundle || '0', 10) || 0;
 
-                // paksa integer
                 let rej = parseInt(rejInput.value || '0', 10);
                 if (isNaN(rej) || rej < 0) rej = 0;
 
-                // clamp kalau > bundle
                 if (rej > maxBundle) {
                     rej = maxBundle;
                     anyOver = true;
                 }
 
-                // normalisasi kembali ke input
                 rejInput.value = rej;
 
-                // hitung OK = bundle - reject
                 const ok = maxBundle - rej;
 
                 if (okHidden) {
@@ -326,7 +327,6 @@
             }
         }
 
-        // pasang behavior ke semua input reject
         inputsReject.forEach(i => {
             attachSelectAllOnFocus(i);
             i.addEventListener('input', recalcTotals);

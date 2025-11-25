@@ -353,4 +353,26 @@ class CuttingJobController extends Controller
         ]);
     }
 
+    public function sendToQc(CuttingJob $cuttingJob)
+    {
+        // Cek apakah sudah pernah QC Cutting
+        $hasQcCutting = $cuttingJob->bundles()
+            ->whereHas('qcResults', function ($q) {
+                $q->where('stage', 'cutting');
+            })
+            ->exists();
+
+        // Hanya update status kalau belum pernah QC
+        if (!$hasQcCutting) {
+            // Sesuaikan status yang kamu mau, mis: 'cut_sent_to_qc'
+            $cuttingJob->update([
+                'status' => 'sent_to_qc',
+            ]);
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', 'Cutting job dikirim ke QC Cutting.');
+    }
+
 }

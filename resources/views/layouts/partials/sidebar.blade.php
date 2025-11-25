@@ -373,10 +373,9 @@
             </button>
 
             <div class="collapse {{ $prodQcOpen ? 'show' : '' }}" id="navProductionQc">
-                {{-- Untuk sekarang arahkan ke list Cutting Job dengan view QC.
-                     Nanti bisa ditambah QC Sewing, QC Finishing, dll. --}}
-                <a href="{{ route('production.cutting_jobs.index', ['view' => 'qc']) }}"
-                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.qc.cutting.*') ? 'active' : '' }}">
+                {{-- QC Cutting (index + edit/update) --}}
+                <a href="{{ route('production.qc.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.qc.index') || request()->routeIs('production.qc.cutting.*') ? 'active' : '' }}">
                     <span class="icon">✂️</span>
                     <span>QC Cutting</span>
                 </a>

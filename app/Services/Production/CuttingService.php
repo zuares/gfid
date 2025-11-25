@@ -39,6 +39,7 @@ class CuttingService
                 'status' => 'cut',
                 'total_bundles' => 0,
                 'total_qty_pcs' => 0,
+                'operator_id' => $payload['operator_id'],
             ]);
 
             $operatorId = $payload['operator_id'] ?? null;
