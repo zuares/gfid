@@ -34,6 +34,69 @@
         .table-wrap {
             overflow-x: auto;
         }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: .75rem;
+            flex-wrap: wrap;
+        }
+
+        .header-main {
+            min-width: 0;
+        }
+
+        .header-main h1 {
+            font-size: 1rem;
+        }
+
+        .header-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: .5rem;
+        }
+
+        .status-badge-main {
+            font-size: .78rem;
+        }
+
+        /* MOBILE */
+        @media (max-width: 767.98px) {
+            .card {
+                border-radius: 12px;
+            }
+
+            .page-wrap {
+                padding-inline: .5rem;
+            }
+
+            .header-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .header-actions {
+                align-items: stretch;
+            }
+
+            .status-badge-main {
+                align-self: flex-start;
+            }
+
+            .table.table-sm> :not(caption)>*>* {
+                padding-block: .35rem;
+            }
+
+            /* Sembunyikan kolom yang kurang penting di layar kecil */
+            .col-lot,
+            .col-return-ok,
+            .col-return-reject,
+            .col-remaining {
+                display: none;
+            }
+        }
     </style>
 @endpush
 
@@ -53,10 +116,6 @@
             'class' => 'secondary',
         ];
 
-        // apakah masih ada line in_progress (belum semua dikembalikan)?
-        $hasInProgress = $pickup->lines->contains(fn($l) => $l->status === 'in_progress');
-
-        // apakah sudah ada qty_return (OK / Reject) yang > 0?
         $hasReturn = $pickup->lines->contains(function ($l) {
             return ($l->qty_returned_ok ?? 0) > 0 || ($l->qty_returned_reject ?? 0) > 0;
         });
@@ -65,12 +124,12 @@
         $totalReturnReject = $pickup->lines->sum('qty_returned_reject');
     @endphp
 
-    <div class="page-wrap">
+    <div class="page-wrap py-3 py-md-4">
 
-        {{-- HEADER ATAS --}}
+        {{-- HEADER ATAS (READ-ONLY) --}}
         <div class="card p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-start gap-3">
-                <div>
+            <div class="header-row">
+                <div class="header-main">
                     <h1 class="h5 mb-1">Sewing Pickup: {{ $pickup->code }}</h1>
                     <div class="help">
                         Tanggal: {{ $pickup->date?->format('Y-m-d') ?? $pickup->date }} •
@@ -89,28 +148,14 @@
                     </div>
                 </div>
 
-                <div class="d-flex flex-column align-items-end gap-2">
-                    <span class="badge bg-{{ $cfg['class'] }} px-3 py-2">
+                <div class="header-actions">
+                    <span class="badge bg-{{ $cfg['class'] }} px-3 py-2 status-badge-main">
                         {{ $cfg['label'] }}
                     </span>
 
-                    <div class="d-flex gap-2">
-                        <a href="{{ route('production.sewing_pickups.index') }}" class="btn btn-sm btn-outline-secondary">
-                            Kembali
-                        </a>
-
-                        {{-- Tombol Input Sewing Return kalau masih ada line in_progress --}}
-                        @if ($hasInProgress)
-                            <a href="{{ route('production.sewing_returns.create', ['pickup_id' => $pickup->id]) }}"
-                                class="btn btn-sm btn-primary">
-                                Input Sewing Return
-                            </a>
-                        @else
-                            <button type="button" class="btn btn-sm btn-outline-success" disabled>
-                                Semua bundle sudah dikembalikan
-                            </button>
-                        @endif
-                    </div>
+                    <a href="{{ route('production.sewing_pickups.index') }}" class="btn btn-sm btn-outline-secondary">
+                        Kembali
+                    </a>
                 </div>
             </div>
 
@@ -170,23 +215,23 @@
             </div>
         </div>
 
-        {{-- TABEL DETAIL BUNDLE --}}
+        {{-- DETAIL BUNDLES --}}
         <div class="card p-3 mb-4">
             <h2 class="h6 mb-2">Detail Bundles</h2>
 
             <div class="table-wrap">
-                <table class="table table-sm align-middle mono">
+                <table class="table table-sm align-middle mono mb-0">
                     <thead>
                         <tr>
                             <th style="width: 40px;">#</th>
-                            <th style="width: 150px;">Bundle Code</th>
+                            <th style="width: 150px;">Bundle</th>
                             <th style="width: 160px;">Item Jadi</th>
-                            <th style="width: 180px;">Lot</th>
+                            <th style="width: 180px;" class="col-lot">Lot</th>
                             <th style="width: 120px;">Qty Pickup</th>
                             @if ($hasReturn)
-                                <th style="width: 120px;">Qty Return OK</th>
-                                <th style="width: 120px;">Qty Return Reject</th>
-                                <th style="width: 120px;">Sisa Belum Return</th>
+                                <th style="width: 120px;" class="col-return-ok">Return OK</th>
+                                <th style="width: 120px;" class="col-return-reject">Return Reject</th>
+                                <th style="width: 120px;" class="col-remaining">Sisa</th>
                             @endif
                             <th style="width: 110px;">Status</th>
                         </tr>
@@ -210,12 +255,27 @@
                                 $returnedOk = (float) ($line->qty_returned_ok ?? 0);
                                 $returnedReject = (float) ($line->qty_returned_reject ?? 0);
                                 $remaining = (float) $line->qty_bundle - ($returnedOk + $returnedReject);
+                                if ($remaining < 0) {
+                                    $remaining = 0;
+                                }
                             @endphp
                             <tr>
                                 <td>{{ $loop->iteration }}</td>
-                                <td>{{ $bundle?->bundle_code ?? '-' }}</td>
-                                <td>{{ $bundle?->finishedItem?->code ?? '-' }}</td>
+
                                 <td>
+                                    {{ $bundle?->bundle_code ?? '-' }}
+                                </td>
+
+                                <td>
+                                    {{ $bundle?->finishedItem?->code ?? '-' }}
+                                    @if ($bundle?->finishedItem?->name)
+                                        <div class="small text-muted">
+                                            {{ $bundle->finishedItem->name }}
+                                        </div>
+                                    @endif
+                                </td>
+
+                                <td class="col-lot">
                                     @if ($lot)
                                         {{ $lot->item?->code ?? '-' }}
                                         <span class="badge-soft bg-light border text-muted">
@@ -225,12 +285,19 @@
                                         -
                                     @endif
                                 </td>
+
                                 <td>{{ number_format($line->qty_bundle, 2, ',', '.') }}</td>
 
                                 @if ($hasReturn)
-                                    <td>{{ number_format($returnedOk, 2, ',', '.') }}</td>
-                                    <td>{{ number_format($returnedReject, 2, ',', '.') }}</td>
-                                    <td>{{ number_format($remaining, 2, ',', '.') }}</td>
+                                    <td class="col-return-ok">
+                                        {{ number_format($returnedOk, 2, ',', '.') }}
+                                    </td>
+                                    <td class="col-return-reject">
+                                        {{ number_format($returnedReject, 2, ',', '.') }}
+                                    </td>
+                                    <td class="col-remaining">
+                                        {{ number_format($remaining, 2, ',', '.') }}
+                                    </td>
                                 @endif
 
                                 <td>

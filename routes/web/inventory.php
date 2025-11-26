@@ -1,5 +1,6 @@
 <?php
 use App\Http\Controllers\Inventory\ExternalTransferController;
+use App\Http\Controllers\Inventory\InventoryStockController;
 use App\Http\Controllers\Inventory\StockCardController;
 use App\Http\Controllers\Inventory\TransferController;
 
@@ -28,3 +29,18 @@ Route::prefix('inventory/external-transfers')
         Route::post('/', [ExternalTransferController::class, 'store'])->name('store');
         Route::get('/{externalTransfer}', [ExternalTransferController::class, 'show'])->name('show');
     });
+
+Route::middleware(['auth'])->group(function () {
+    Route::prefix('inventory/stocks')
+        ->name('inventory.stocks.')
+        ->group(function () {
+
+            // stok per item
+            Route::get('/items', [InventoryStockController::class, 'items'])
+                ->name('items');
+
+            // stok per LOT
+            Route::get('/lots', [InventoryStockController::class, 'lots'])
+                ->name('lots');
+        });
+});

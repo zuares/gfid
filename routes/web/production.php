@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Production\CuttingJobController;
+use App\Http\Controllers\Production\FinishingJobController;
 use App\Http\Controllers\Production\ProductionReportController;
 use App\Http\Controllers\Production\QcController;
 use App\Http\Controllers\Production\SewingPickupController;
@@ -121,6 +122,7 @@ Route::middleware(['auth'])->group(function () {
             // ---- Laporan Performa Operator Jahit ----
             Route::get('/report/operators', [SewingReturnController::class, 'operatorSummary'])
                 ->name('sewing_returns.report_operators');
+
         });
 
         // ==========================
@@ -145,8 +147,18 @@ Route::middleware(['auth'])->group(function () {
 
             Route::get('wip-sewing-age', [ProductionReportController::class, 'wipSewingAge'])
                 ->name('wip_sewing_age');
+            Route::get('/finishing-jobs', [ProductionReportController::class, 'finishingJobs'])
+                ->name('reports.finishing_jobs');
 
         });
+
+        // action khusus untuk posting & jalankan inventory
+        Route::post('finishing_jobs/{finishing_job}/post', [FinishingJobController::class, 'post'])
+            ->name('finishing_jobs.post');
+        Route::get('finishing_jobs/bundles-ready', [FinishingJobController::class, 'readyBundles'])
+            ->name('finishing_jobs.bundles_ready');
+        Route::resource('finishing_jobs', FinishingJobController::class)
+            ->except(['destroy']);
 
     });
 });

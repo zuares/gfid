@@ -1,4 +1,15 @@
 {{-- resources/views/components/mobile-bottom-nav.blade.php --}}
+@php
+    // Flag aktif per tab, sesuaikan dengan grouping route di app-mu
+    $isDashboard = request()->routeIs('dashboard');
+
+    $isProduction = request()->routeIs('production.*'); // semua route produksi (cutting, sewing, qc, report, dll)
+
+    $isInventory = request()->routeIs('inventory.*'); // stok card, transfer, external transfer, dll
+
+    $isProfile = request()->routeIs('profile.*') || request()->routeIs('settings.*');
+@endphp
+
 <style>
     .mobile-bottom-nav {
         position: fixed;
@@ -101,7 +112,7 @@
 
 <div class="mobile-bottom-nav">
     {{-- HOME --}}
-    <a href="{{ route('dashboard') }}" class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+    <a href="{{ route('dashboard') }}" class="nav-item {{ $isDashboard ? 'active' : '' }}">
         <span class="icon">
             {{-- icon home --}}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
@@ -114,7 +125,8 @@
     </a>
 
     {{-- PROD --}}
-    <a href="#" class="nav-item">
+    <a href="{{ Route::has('production.cutting_jobs.index') ? route('production.cutting_jobs.index') : '#' }}"
+        class="nav-item {{ $isProduction ? 'active' : '' }}">
         <span class="icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
                 stroke-linejoin="round">
@@ -129,8 +141,9 @@
         <span class="label">Prod</span>
     </a>
 
-    {{-- CENTER FAB --}}
-    <a href="#" class="nav-item center-btn">
+    {{-- CENTER FAB: quick action (contoh: Sewing Pickup baru) --}}
+    <a href="{{ Route::has('production.sewing_pickups.create') ? route('production.sewing_pickups.create') : '#' }}"
+        class="nav-item center-btn">
         <div class="center-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
                 stroke-linejoin="round">
@@ -141,7 +154,8 @@
     </a>
 
     {{-- STOCK --}}
-    <a href="#" class="nav-item">
+    <a href="{{ Route::has('inventory.stock_card.index') ? route('inventory.stock_card.index') : '#' }}"
+        class="nav-item {{ $isInventory ? 'active' : '' }}">
         <span class="icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
                 stroke-linejoin="round">
@@ -155,7 +169,8 @@
     </a>
 
     {{-- PROFILE --}}
-    <a href="#" class="nav-item">
+    <a href="{{ Route::has('profile.edit') ? route('profile.edit') : '#' }}"
+        class="nav-item {{ $isProfile ? 'active' : '' }}">
         <span class="icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
                 stroke-linejoin="round">

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Production;
 
-use App\Helpers\CodeGenerator;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\SewingPickup;
@@ -12,6 +11,7 @@ use App\Models\SewingReturnLine;
 use App\Models\Warehouse;
 use App\Services\Inventory\InventoryService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -23,61 +23,68 @@ class SewingReturnController extends Controller
 
     public function index(Request $request)
     {
-        $q = SewingReturn::query()
-            ->with([
-                'warehouse',
-                'operator',
-                'lines',
-            ]);
+        $filters = [
+            'status' => $request->get('status'),
+            'operator_id' => $request->get('operator_id'),
+            'from_date' => $request->get('from_date'),
+            'to_date' => $request->get('to_date'),
+            'q' => $request->get('q'),
+        ];
 
-        // Filter tanggal (optional)
-        if ($request->filled('date_from')) {
-            $q->whereDate('date', '>=', $request->date_from);
-        }
+        $query = SewingReturn::with(['operator', 'warehouse', 'pickup'])
+            ->when($filters['status'], function ($q, $status) {
+                $q->where('status', $status);
+            })
+            ->when($filters['operator_id'], function ($q, $opId) {
+                $q->where('operator_id', $opId);
+            })
+            ->when($filters['from_date'], function ($q, $from) {
+                $q->whereDate('date', '>=', $from);
+            })
+            ->when($filters['to_date'], function ($q, $to) {
+                $q->whereDate('date', '<=', $to);
+            })
+            ->when($filters['q'], function ($q, $search) {
+                $search = trim($search);
+                $q->where(function ($inner) use ($search) {
+                    $inner->where('code', 'like', "%{$search}%")
+                        ->orWhereHas('pickup', function ($qq) use ($search) {
+                            $qq->where('code', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('operator', function ($qq) use ($search) {
+                            $qq->where('code', 'like', "%{$search}%")
+                                ->orWhere('name', 'like', "%{$search}%");
+                        });
+                });
+            })
+            ->orderByDesc('date')
+            ->orderByDesc('id');
 
-        if ($request->filled('date_to')) {
-            $q->whereDate('date', '<=', $request->date_to);
-        }
+        $returns = $query->paginate(20)->withQueryString();
 
-        // Filter operator (optional)
-        if ($request->filled('operator_id')) {
-            $q->where('operator_id', $request->operator_id);
-        }
-
-        $returns = $q->orderByDesc('date')
-            ->orderByDesc('id')
-            ->paginate(20)
-            ->withQueryString();
-
-        // List operator jahit untuk filter
-        $operators = Employee::query()
-            ->where('role', 'sewing')
-            ->orderBy('code')
-            ->get();
+        // kalau mau: semua operator jahit (buat filter)
+        $operators = Employee::orderBy('code')->get(); // bisa difilter role sewing nanti
 
         return view('production.sewing_returns.index', [
             'returns' => $returns,
             'operators' => $operators,
-            'filters' => $request->only(['date_from', 'date_to', 'operator_id']),
+            'filters' => $filters,
         ]);
     }
 
-    public function show(SewingReturn $sewingReturn)
+    public function show(SewingReturn $return)
     {
-        $sewingReturn->load([
+        $return->load([
             'warehouse',
             'operator',
+            'pickup',
             'lines.sewingPickupLine.sewingPickup',
             'lines.sewingPickupLine.bundle.finishedItem',
             'lines.sewingPickupLine.bundle.cuttingJob.lot.item',
         ]);
 
-        // Asumsi semua line berasal dari pickup yang sama
-        $pickup = optional($sewingReturn->lines->first()?->sewingPickupLine)->sewingPickup;
-
         return view('production.sewing_returns.show', [
-            'return' => $sewingReturn,
-            'pickup' => $pickup,
+            'return' => $return,
         ]);
     }
 
@@ -87,31 +94,57 @@ class SewingReturnController extends Controller
      */
     public function create(Request $request)
     {
-        $pickupId = $request->get('pickup_id');
+        $pickupId = $request->get('pickup_id') ?? old('pickup_id');
 
-        /** @var SewingPickup $pickup */
-        $pickup = SewingPickup::with([
-            'warehouse',
-            'operator',
-            'lines.bundle.finishedItem',
-            'lines.bundle.cuttingJob.lot.item',
-        ])
-            ->findOrFail($pickupId);
-
-        // Hanya lines yang masih in_progress
-        $lines = $pickup->lines()
-            ->where('status', 'in_progress')
+        // List pickup (untuk dropdown pilih Pickup)
+        $pickups = SewingPickup::query()
+            ->with('operator')
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->limit(50) // kalau mau bisa diganti paginate
             ->get();
 
-        if ($lines->isEmpty()) {
-            return redirect()
-                ->route('production.sewing_pickups.show', $pickup)
-                ->with('warning', 'Semua bundle pada pickup ini sudah selesai dikembalikan.');
+        $currentPickup = null;
+        $lines = collect();
+
+        if ($pickupId) {
+            $currentPickup = SewingPickup::with([
+                'operator',
+                'lines.bundle.finishedItem',
+                'lines.bundle.cuttingJob.lot.item',
+            ])
+                ->find($pickupId);
+
+            if ($currentPickup) {
+                $lines = $currentPickup->lines
+                    ->map(function ($line) {
+                        $qtyBundle = (float) $line->qty_bundle;
+                        $returnedOk = (float) ($line->qty_returned_ok ?? 0);
+                        $returnedRej = (float) ($line->qty_returned_reject ?? 0);
+                        $remaining = $qtyBundle - ($returnedOk + $returnedRej);
+
+                        $line->remaining_qty = max($remaining, 0);
+
+                        return $line;
+                    })
+                    ->filter(function ($line) {
+                        return ($line->remaining_qty ?? 0) > 0;
+                    })
+                    ->values();
+            }
         }
 
+        // Operator yang boleh dipakai di header (QC / sewing)
+        $operators = Employee::query()
+            ->whereIn('role', ['sewing', 'cutting'])
+            ->orderBy('code')
+            ->get();
+
         return view('production.sewing_returns.create', [
-            'pickup' => $pickup,
+            'pickups' => $pickups,
+            'currentPickup' => $currentPickup,
             'lines' => $lines,
+            'operators' => $operators,
         ]);
     }
 
@@ -123,103 +156,118 @@ class SewingReturnController extends Controller
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        // 1. VALIDASI DASAR
+        $data = $request->validate([
             'pickup_id' => ['required', 'exists:sewing_pickups,id'],
             'date' => ['required', 'date'],
             'notes' => ['nullable', 'string'],
+            'operator_id' => ['nullable', 'exists:employees,id'],
 
             'results' => ['required', 'array', 'min:1'],
             'results.*.line_id' => ['required', 'exists:sewing_pickup_lines,id'],
             'results.*.qty_ok' => ['nullable', 'numeric', 'min:0'],
             'results.*.qty_reject' => ['nullable', 'numeric', 'min:0'],
             'results.*.notes' => ['nullable', 'string'],
-        ], [
-            'results.required' => 'Minimal satu baris hasil jahit harus diisi.',
-            'results.*.line_id.required' => 'Baris bundle tidak valid.',
         ]);
 
-        DB::transaction(function () use ($validated) {
+        $pickup = SewingPickup::with(['lines.bundle.finishedItem'])->findOrFail($data['pickup_id']);
 
-            /** @var SewingPickup $pickup */
-            $pickup = SewingPickup::with([
-                'warehouse',
-                'operator',
-            ])
-                ->findOrFail($validated['pickup_id']);
+        // Siapkan gudang WIP-FIN (tujuan OK)
+        $wipFinWarehouse = Warehouse::where('code', 'WIP-FIN')->first();
+        if (!$wipFinWarehouse) {
+            throw ValidationException::withMessages([
+                'pickup_id' => 'Gudang WIP-FIN belum diset di master gudang.',
+            ]);
+        }
 
-            $date = $validated['date'];
+        $return = null;
 
-            // Cari gudang tujuan: WIP-FIN & REJECT
-            $wipFinWarehouseId = Warehouse::where('code', 'WIP-FIN')->value('id');
-            $rejectWarehouseId = Warehouse::where('code', 'REJECT')->value('id'); // optional boleh kamu bikin tidak wajib
+        DB::transaction(function () use (&$return, $data, $pickup, $wipFinWarehouse) {
+            // ===========================
+            // 2. GENERATE KODE SWR-YYYYMMDD-###
+            // ===========================
+            $date = Carbon::parse($data['date'] ?? now());
+            $prefix = 'SWR-' . $date->format('Ymd') . '-';
 
-            if (!$wipFinWarehouseId) {
-                throw ValidationException::withMessages([
-                    'pickup_id' => 'Gudang WIP-FIN belum dikonfigurasi. Pastikan ada warehouse dengan code "WIP-FIN".',
-                ]);
+            $lastCode = SewingReturn::whereDate('date', $date->toDateString())
+                ->where('code', 'like', $prefix . '%')
+                ->lockForUpdate()
+                ->orderByDesc('code')
+                ->value('code');
+
+            $nextNumber = 1;
+            if ($lastCode && preg_match('/(\d+)$/', $lastCode, $m)) {
+                $nextNumber = (int) $m[1] + 1;
             }
 
-            // Header Sewing Return
-            /** @var SewingReturn $return */
+            $code = $prefix . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+
+            // 3. BUAT HEADER RETURN
             $return = SewingReturn::create([
-                'code' => CodeGenerator::generate('SWR'),
-                'date' => $date,
-                'warehouse_id' => $pickup->warehouse_id,
-                'operator_id' => $pickup->operator_id,
-                'status' => 'draft',
-                'notes' => $validated['notes'] ?? null,
+                'code' => $code,
+                'pickup_id' => $pickup->id,
+                'warehouse_id' => $pickup->warehouse_id, // asal stok = WIP-SEW
+                'operator_id' => $data['operator_id'] ?? $pickup->operator_id,
+                'date' => $data['date'],
+                'notes' => $data['notes'] ?? null,
+                'status' => 'posted',
             ]);
 
-            $processedLines = 0;
+            $adaBaris = false;
 
-            foreach ($validated['results'] as $row) {
-                $qtyOk = (float) ($row['qty_ok'] ?? 0);
-                $qtyReject = (float) ($row['qty_reject'] ?? 0);
-                $totalReturn = $qtyOk + $qtyReject;
-
-                if ($totalReturn <= 0) {
-                    continue;
-                }
-
+            foreach ($data['results'] as $idx => $row) {
                 /** @var SewingPickupLine $line */
-                $line = SewingPickupLine::with([
-                    'bundle.finishedItem',
-                    'bundle.cuttingJob.lot',
-                ])
+                $line = SewingPickupLine::lockForUpdate()
+                    ->with('bundle.finishedItem')
                     ->findOrFail($row['line_id']);
 
                 $bundle = $line->bundle;
-                $lot = $bundle?->cuttingJob?->lot;
-                $lotId = $lot?->id; // cuma buat info / future use
+                $item = $bundle?->finishedItem;
 
-                // Cek sisa yang masih boleh direturn:
-                $alreadyReturned = (float) (($line->qty_returned_ok ?? 0) + ($line->qty_returned_reject ?? 0));
-                $remaining = (float) ($line->qty_bundle - $alreadyReturned);
+                if (!$item) {
+                    throw ValidationException::withMessages([
+                        "results.$idx.qty_ok" => "Item jadi untuk bundle ini belum di-set.",
+                    ]);
+                }
 
-                if ($remaining <= 0) {
+                $qtyBundle = (float) $line->qty_bundle;
+                $returnedOk = (float) ($line->qty_returned_ok ?? 0);
+                $returnedRej = (float) ($line->qty_returned_reject ?? 0);
+                $remaining = $qtyBundle - ($returnedOk + $returnedRej);
+
+                $qtyOk = (float) ($row['qty_ok'] ?? 0);
+                $qtyReject = (float) ($row['qty_reject'] ?? 0);
+
+                // kalau user gak isi apa-apa → lewati baris ini
+                if ($qtyOk <= 0 && $qtyReject <= 0) {
                     continue;
                 }
 
-                // Clamp: jangan boleh lebih dari remaining
-                if ($totalReturn > $remaining) {
-                    $excess = $totalReturn - $remaining;
-
-                    if ($qtyReject >= $excess) {
-                        $qtyReject -= $excess;
-                    } else {
-                        $excess -= $qtyReject;
-                        $qtyReject = 0;
-                        $qtyOk = max(0, $qtyOk - $excess);
-                    }
-
-                    $totalReturn = $qtyOk + $qtyReject;
-                    if ($totalReturn <= 0) {
-                        continue;
-                    }
+                // 4. VALIDASI SISA
+                if ($remaining <= 0) {
+                    throw ValidationException::withMessages([
+                        "results.$idx.qty_ok" => "Qty sisa bundle sudah 0, tidak bisa setor lagi.",
+                    ]);
                 }
 
-                // 🔹 Simpan SewingReturnLine
-                SewingReturnLine::create([
+                if (($qtyOk + $qtyReject) - $remaining > 0.000001) {
+                    $max = number_format($remaining, 2, ',', '.');
+                    throw ValidationException::withMessages([
+                        "results.$idx.qty_ok" => "Qty OK + Reject melebihi qty sisa (maks $max).",
+                    ]);
+                }
+
+                // (opsional) wajib catatan kalau ada reject
+                if ($qtyReject > 0 && empty($row['notes'])) {
+                    throw ValidationException::withMessages([
+                        "results.$idx.notes" => "Harap isi catatan jika ada qty reject.",
+                    ]);
+                }
+
+                $adaBaris = true;
+
+                // 5. SIMPAN DETAIL RETURN
+                $returnLine = SewingReturnLine::create([
                     'sewing_return_id' => $return->id,
                     'sewing_pickup_line_id' => $line->id,
                     'qty_ok' => $qtyOk,
@@ -227,86 +275,83 @@ class SewingReturnController extends Controller
                     'notes' => $row['notes'] ?? null,
                 ]);
 
-                $notes = "Sewing return {$return->code} - bundle {$bundle->bundle_code}";
+                // 6. UPDATE AKUMULASI DI LINE PICKUP
+                $line->qty_returned_ok = $returnedOk + $qtyOk;
+                $line->qty_returned_reject = $returnedRej + $qtyReject;
 
-                // 🔹 INVENTORY:
-                // OUT dari gudang sewing (pickup->warehouse_id)
-                $this->inventory->stockOut(
-                    warehouseId: $pickup->warehouse_id,
-                    itemId: $bundle->finished_item_id,
-                    qty: $totalReturn,
-                    date: $date,
-                    sourceType: 'sewing_return',
-                    sourceId: $return->id,
-                    notes: $notes,
-                    allowNegative: false,
-                    lotId: null, // ⬅️ WIP move, JANGAN konsumsi lot cost lagi
-                );
+                $totalReturned = $line->qty_returned_ok + $line->qty_returned_reject;
 
-                // IN ke WIP-FIN (OK)
-                if ($qtyOk > 0) {
-                    $this->inventory->stockIn(
-                        warehouseId: $wipFinWarehouseId,
-                        itemId: $bundle->finished_item_id,
-                        qty: $qtyOk,
-                        date: $date,
-                        sourceType: 'sewing_return_ok',
-                        sourceId: $return->id,
-                        notes: $notes,
-                        lotId: null,
-                        unitCost: null,
-                    );
-                }
-
-                // IN ke REJECT (Reject)
-                if ($qtyReject > 0 && $rejectWarehouseId) {
-                    $this->inventory->stockIn(
-                        warehouseId: $rejectWarehouseId,
-                        itemId: $bundle->finished_item_id,
-                        qty: $qtyReject,
-                        date: $date,
-                        sourceType: 'sewing_return_reject',
-                        sourceId: $return->id,
-                        notes: $notes,
-                        lotId: null,
-                        unitCost: null,
-                    );
-                }
-
-                // 🔹 Update progress line
-                $line->qty_returned_ok = (float) ($line->qty_returned_ok ?? 0) + $qtyOk;
-                $line->qty_returned_reject = (float) ($line->qty_returned_reject ?? 0) + $qtyReject;
-
-                $totalAfter = ($line->qty_returned_ok ?? 0) + ($line->qty_returned_reject ?? 0);
-                if ($totalAfter >= $line->qty_bundle) {
+                if ($totalReturned >= $qtyBundle - 0.000001) {
                     $line->status = 'done';
+                } else {
+                    $line->status = 'in_progress';
                 }
 
                 $line->save();
 
-                $processedLines++;
+                // 7. MUTASI STOK
+                $totalProcessed = $qtyOk + $qtyReject;
+
+                if ($totalProcessed > 0) {
+                    // ⬇️ STOCK OUT dari gudang pickup (WIP-SEW)
+                    $this->inventory->stockOut(
+                        warehouseId: $pickup->warehouse_id,
+                        itemId: $item->id,
+                        qty: $totalProcessed,
+                        date: $data['date'] ?? now(),
+                        sourceType: 'sewing_returns',
+                        sourceId: $returnLine->id,
+                        notes: "Keluar dari WIP-SEW (OK {$qtyOk}, Reject {$qtyReject})",
+                        allowNegative: false,
+                        lotId: null,
+                    );
+                }
+
+                if ($qtyOk > 0) {
+                    // ⬆️ STOCK IN ke WIP-FIN untuk hasil OK
+                    $this->inventory->stockIn(
+                        warehouseId: $wipFinWarehouse->id,
+                        itemId: $item->id,
+                        qty: $qtyOk,
+                        date: $data['date'] ?? now(),
+                        sourceType: 'sewing_returns',
+                        sourceId: $returnLine->id,
+                        notes: 'Masuk WIP-FIN (hasil jahit OK)',
+                        lotId: null,
+                    );
+
+                    // 🔁 UPDATE WIP-FIN DI CUTTING_JOB_BUNDLES
+                    //    bundle sekarang punya saldo WIP di WIP-FIN sebesar qtyOk tambahan
+                    $currentWipQty = (float) ($bundle->wip_qty ?? 0);
+
+                    $bundle->wip_warehouse_id = $wipFinWarehouse->id;
+                    $bundle->wip_qty = $currentWipQty + $qtyOk;
+
+                    $bundle->save();
+                }
+
+                // Qty Reject tidak dimasukkan ke gudang lain → dianggap loss
+                // (kalau nanti mau masuk REJECT warehouse, kita bisa tambah block di sini)
             }
 
-            if ($processedLines === 0) {
+            if (!$adaBaris) {
                 throw ValidationException::withMessages([
-                    'results' => 'Tidak ada baris Sewing Return yang valid. Pastikan Qty OK/Reject diisi dan tidak melebihi sisa.',
+                    'results' => 'Isi minimal satu baris Qty OK / Reject.',
                 ]);
             }
 
-            // Optional: kalau semua line pickup sudah done → tutup pickup
+            // 8. UPDATE STATUS HEADER PICKUP
             $stillInProgress = $pickup->lines()
                 ->where('status', 'in_progress')
                 ->exists();
 
-            if (!$stillInProgress) {
-                $pickup->status = 'closed';
-                $pickup->save();
-            }
+            $pickup->status = $stillInProgress ? 'posted' : 'closed';
+            $pickup->save();
         });
 
         return redirect()
-            ->route('production.sewing_pickups.index')
-            ->with('success', 'Sewing return berhasil disimpan dan stok sudah dipindahkan ke WIP-FIN / REJECT.');
+            ->route('production.sewing_returns.show', $return)
+            ->with('success', 'Sewing Return + mutasi stok berhasil disimpan.');
     }
 
     public function operatorSummary(Request $request)

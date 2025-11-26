@@ -2,8 +2,19 @@
 
 @php
     $isEdit = $mode === 'edit';
+
     // dipakai JS untuk saldo LOT
     $lotQty = isset($lotBalance) ? (float) $lotBalance : (isset($qty) ? (float) $qty : 0);
+
+    // default operator = MRF (kalau create), kalau edit pakai operator bundle pertama
+    $defaultOperatorId = $isEdit
+        ? optional($job->bundles->first())->operator_id
+        : optional($operators->firstWhere('code', 'MRF'))->id;
+
+    // tanggal beli lot (fallback ke created_at kalau field lain tidak ada)
+    $lotPurchaseDate = $lot?->purchased_at ?? ($lot?->purchase_date ?? ($lot?->received_at ?? $lot?->created_at));
+
+    $lotPurchaseDateLabel = $lotPurchaseDate ? $lotPurchaseDate->format('d/m/Y') : '-';
 @endphp
 
 <form action="{{ $isEdit ? route('production.cutting_jobs.update', $job) : route('production.cutting_jobs.store') }}"
@@ -14,12 +25,57 @@
         @method('PUT')
     @endif
 
+    {{-- MOBILE: INFORMASI LOT SATU BARIS (Tgl Beli • Nama Bahan • Qty) --}}
+    <div class="lot-bar-mobile d-md-none mb-2">
+        <span class="mono">
+            {{ $lotPurchaseDateLabel }}
+        </span>
+        <span class="mx-1">•</span>
+        <span class="fw-semibold">
+            {{ $lot?->item?->name ?? '-' }}
+        </span>
+        <span class="mx-1">•</span>
+        <span class="mono">
+            {{ number_format($lotQty, 2, ',', '.') }} Kg
+        </span>
+    </div>
+
+    {{-- hidden --}}
+    <input type="hidden" name="warehouse_id" value="{{ $warehouse?->id }}">
+    <input type="hidden" name="lot_id" value="{{ $lot?->id }}">
+    <input type="hidden" name="lot_balance" value="{{ $lotQty }}">
+
     {{-- =========================
-         BAGIAN INFORMASI LOT
+         BAGIAN INFORMASI LOT (DESKTOP SAJA)
     ========================== --}}
-    <div class="card p-3 mb-3">
+    <div class="card p-3 mb-3 d-none d-md-block">
         <h2 class="h6 mb-2">Informasi Lot Kain</h2>
 
+        {{-- HEADER: Tgl Beli, Nama Bahan, Qty --}}
+        <div class="row g-3 mb-2">
+            <div class="col-md-4">
+                <div class="help mb-1">Tgl Beli</div>
+                <div class="mono">
+                    {{ $lotPurchaseDateLabel }}
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="help mb-1">Nama Bahan</div>
+                <div>
+                    {{ $lot?->item?->name ?? '-' }}
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="help mb-1">Qty</div>
+                <div class="mono">
+                    {{ number_format($lotQty, 2, ',', '.') }} Kg
+                </div>
+            </div>
+        </div>
+
+        {{-- DETAIL LOT (kode & gudang) --}}
         <div class="row g-3">
             <div class="col-md-4 col-12">
                 <div class="help mb-1">LOT</div>
@@ -37,15 +93,10 @@
             <div class="col-md-4 col-6">
                 <div class="help mb-1">Saldo LOT (perkiraan)</div>
                 <div class="mono">
-                    {{ number_format($lotQty, 2, ',', '.') }}
+                    {{ number_format($lotQty, 2, ',', '.') }} Kg
                 </div>
             </div>
         </div>
-
-        {{-- hidden --}}
-        <input type="hidden" name="warehouse_id" value="{{ $warehouse?->id }}">
-        <input type="hidden" name="lot_id" value="{{ $lot?->id }}">
-        <input type="hidden" name="lot_balance" value="{{ $lotQty }}">
     </div>
 
     {{-- =========================
@@ -64,12 +115,16 @@
                 @enderror
             </div>
 
-            <div class="col-md-3 col-12">
+            {{-- col-6 supaya di mobile satu baris berdua (tanggal + operator) --}}
+            <div class="col-md-3 col-6">
                 <label class="form-label">Operator Cutting</label>
+                @php
+                    $currentOperatorId = old('operator_id', $defaultOperatorId);
+                @endphp
                 <select name="operator_id" class="form-select @error('operator_id') is-invalid @enderror">
                     <option value="">Pilih operator cutting…</option>
                     @foreach ($operators as $op)
-                        <option value="{{ $op->id }}" @selected(old('operator_id', $isEdit ? optional($job->bundles->first())->operator_id : null) == $op->id)>
+                        <option value="{{ $op->id }}" @selected($currentOperatorId == $op->id)>
                             {{ $op->code }} — {{ $op->name }}
                         </option>
                     @endforeach
@@ -79,7 +134,8 @@
                 @enderror
             </div>
 
-            <div class="col-12">
+            {{-- Catatan: disembunyikan di mobile, tampil di md+ --}}
+            <div class="col-12 d-none d-md-block">
                 <label class="form-label">Catatan</label>
                 <textarea name="notes" rows="2" class="form-control">{{ old('notes', $isEdit ? $job->notes : '') }}</textarea>
             </div>
@@ -90,36 +146,16 @@
          BAGIAN OUTPUT BUNDLES
     ========================== --}}
     <div class="card p-3 mb-4">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <div>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-2">
+            <div class="mb-2 mb-md-0">
                 <h2 class="h6 mb-0">Output Bundles</h2>
-                <div class="help">
-                    # diisi otomatis. Pemakaian kain hanya tampilan (dibagi rata dari saldo LOT),
-                    nilai final dihitung di server.
-                </div>
             </div>
 
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="add-row">
-                + Tambah baris
-            </button>
-        </div>
-
-        {{-- SUMMARY --}}
-        <div class="d-flex flex-wrap gap-3 align-items-center mb-1 small">
-            <div class="help mb-0">
-                Saldo LOT: <span class="mono">{{ number_format($lotQty, 2, ',', '.') }}</span>
-            </div>
-            <div class="help mb-0">
-                Baris: <span class="mono" id="bundle-row-count">0</span>
-            </div>
-            <div class="help mb-0">
-                Total pcs: <span class="mono" id="bundle-total-qty">0,00</span>
-            </div>
-            <div class="help mb-0">
-                Used/baris: <span class="mono" id="bundle-per-row">0,00</span>
-            </div>
-            <div class="help mb-0">
-                Total pemakaian: <span class="mono" id="bundle-total-used">0,00</span>
+            {{-- tombol atas hanya untuk desktop --}}
+            <div class="w-100 w-md-auto d-none d-md-block">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="add-row-top">
+                    + Tambah baris
+                </button>
             </div>
         </div>
 
@@ -135,9 +171,15 @@
                         <th style="width:40px;">#</th>
                         <th style="width:180px;">Item Jadi</th>
                         <th style="width:110px;">Qty (pcs)</th>
-                        <th>Item Category</th>
-                        <th style="width:120px;">Used</th>
-                        <th style="width:40px;"></th>
+
+                        {{-- Item Category: hanya tampil di md+ --}}
+                        <th class="d-none d-md-table-cell">Item Category</th>
+
+                        {{-- Used: hanya tampil di md+ --}}
+                        <th style="width:120px;" class="d-none d-md-table-cell">Used</th>
+
+                        {{-- tombol hapus: hanya tampil di md+ --}}
+                        <th style="width:40px;" class="d-none d-md-table-cell"></th>
                     </tr>
                 </thead>
                 <tbody id="bundle-rows">
@@ -179,8 +221,8 @@
                                     value="{{ isset($row['qty_pcs']) ? (int) $row['qty_pcs'] : '' }}">
                             </td>
 
-                            {{-- Item Category (auto) --}}
-                            <td data-label="Item Category">
+                            {{-- Item Category (auto) - sembunyi di mobile --}}
+                            <td data-label="Item Category" class="d-none d-md-table-cell">
                                 <span class="bundle-cat-display help">
                                     {{ $row['item_category'] ?? '-' }}
                                 </span>
@@ -188,13 +230,13 @@
                                     class="bundle-cat-input" value="{{ $row['item_category'] ?? '' }}">
                             </td>
 
-                            {{-- Used (hanya tampil) --}}
-                            <td data-label="Used">
+                            {{-- Used (hanya tampil di desktop) --}}
+                            <td data-label="Used" class="d-none d-md-table-cell">
                                 <span class="bundle-qty-used help">-</span>
                             </td>
 
-                            {{-- tombol hapus --}}
-                            <td data-label="">
+                            {{-- tombol hapus - sembunyi di mobile --}}
+                            <td data-label="" class="d-none d-md-table-cell">
                                 <button type="button" class="btn btn-sm btn-link text-danger remove-row">×</button>
                             </td>
                         </tr>
@@ -202,6 +244,13 @@
 
                 </tbody>
             </table>
+        </div>
+
+        {{-- tombol bawah khusus mobile --}}
+        <div class="mt-2 d-md-none">
+            <button type="button" class="btn btn-outline-secondary w-100 btn-sm" id="add-row-bottom">
+                + Tambah baris
+            </button>
         </div>
 
         @error('bundles')
@@ -218,12 +267,41 @@
 
 </form>
 
+@push('head')
+    <style>
+        .lot-bar-mobile {
+            position: sticky;
+            top: 56px;
+            /* sesuaikan dengan tinggi navbar-mu */
+            z-index: 1020;
+            background: var(--card, #fff);
+            border-bottom: 1px solid var(--line, #e5e7eb);
+            padding: .35rem .75rem;
+            font-size: .85rem;
+            display: flex;
+            align-items: center;
+            gap: .25rem;
+            white-space: nowrap;
+            overflow-x: auto;
+        }
+
+        @media (max-width: 767.98px) {
+
+            /* Biar header Output Bundles dan tombol rapi di mobile */
+            .card .d-flex.flex-column.flex-md-row {
+                gap: .5rem;
+            }
+        }
+    </style>
+@endpush
+
 @push('scripts')
     <script>
         const bundleRows = document.getElementById('bundle-rows');
-        const addRowBtn = document.getElementById('add-row');
+        const addRowBtnTop = document.getElementById('add-row-top');
+        const addRowBtnBottom = document.getElementById('add-row-bottom');
 
-        const rowCountSpan = document.getElementById('bundle-row-count');
+        const rowCountSpan = document.getElementById('bundle-row-count'); // elemen summary sudah tidak ada, aman
         const perRowSpan = document.getElementById('bundle-per-row');
         const totalQtySpan = document.getElementById('bundle-total-qty');
         const totalUsedSpan = document.getElementById('bundle-total-used');
@@ -277,9 +355,9 @@
             const totalUsed = perRow * count;
 
             if (rowCountSpan) rowCountSpan.textContent = count;
-            if (perRowSpan) perRowSpan.textContent = perRow.toFixed(2).replace('.', ',');
+            if (perRowSpan) perRowSpan.textContent = perRow?.toFixed ? perRow.toFixed(2).replace('.', ',') : '';
             if (totalQtySpan) totalQtySpan.textContent = totalQtyPcs.toFixed(2).replace('.', ',');
-            if (totalUsedSpan) totalUsedSpan.textContent = totalUsed.toFixed(2).replace('.', ',');
+            if (totalUsedSpan) totalUsedSpan.textContent = totalUsed?.toFixed ? totalUsed.toFixed(2).replace('.', ',') : '';
 
             if (warningEl) {
                 warningEl.style.display = (totalUsed > lotQty + 0.000001) ? 'block' : 'none';
@@ -365,17 +443,17 @@
                name="bundles[${index}][qty_pcs]"
                class="form-control form-control-sm text-end bundle-qty">
     </td>
-    <td data-label="Item Category">
+    <td data-label="Item Category" class="d-none d-md-table-cell">
         <span class="bundle-cat-display help">-</span>
         <input type="hidden"
                name="bundles[${index}][item_category]"
                class="bundle-cat-input"
                value="">
     </td>
-    <td data-label="Used">
+    <td data-label="Used" class="d-none d-md-table-cell">
         <span class="bundle-qty-used help">-</span>
     </td>
-    <td data-label="">
+    <td data-label="" class="d-none d-md-table-cell">
         <button type="button"
                 class="btn btn-sm btn-link text-danger remove-row">×</button>
     </td>
@@ -398,8 +476,11 @@
             recalcAll();
         }
 
-        if (addRowBtn) {
-            addRowBtn.addEventListener('click', addRow);
+        if (addRowBtnTop) {
+            addRowBtnTop.addEventListener('click', addRow);
+        }
+        if (addRowBtnBottom) {
+            addRowBtnBottom.addEventListener('click', addRow);
         }
 
         // hapus baris

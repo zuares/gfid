@@ -43,5 +43,11 @@ class WarehouseSeeder extends Seeder
             'type' => 'internal',
             'active' => 1,
         ]);
+        Warehouse::create([
+            'code' => 'REJECT',
+            'name' => 'WIP Reject / Defact',
+            'type' => 'internal',
+            'active' => 1,
+        ]);
     }
 }

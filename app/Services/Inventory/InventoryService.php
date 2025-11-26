@@ -64,7 +64,7 @@ class InventoryService
             'source_type' => $sourceType,
             'source_id' => $sourceId,
             'notes' => $notes,
-            'lot_id' => $lotId,
+            'lot_id' => $lotId ?: null,
             'unit_cost' => $unitCostValue,
             'total_cost' => $totalCost,
         ]);
@@ -324,6 +324,18 @@ class InventoryService
         }
 
         return now()->toDateString();
+    }
+
+    public function getLotBalance(
+        int $warehouseId,
+        int $itemId,
+        int $lotId,
+    ): float {
+        return (float) InventoryMutation::query()
+            ->where('warehouse_id', $warehouseId)
+            ->where('item_id', $itemId)
+            ->where('lot_id', $lotId)
+            ->sum('qty_change'); // IN positif, OUT negatif → saldo
     }
 
     protected function num(float | int | string | null $value): float

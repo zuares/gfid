@@ -53,18 +53,16 @@ class SewingPickupController extends Controller
 
     public function bundlesReady()
     {
-        $bundles = CuttingJobBundle::query()
-            ->with([
-                'finishedItem',
-                'operator',
-                'cuttingJob.lot.item',
-                'qcResults' => fn($q) => $q->where('stage', 'cutting'),
-            ])
-            ->whereIn('status', ['qc_ok', 'qc_mixed']) // ready to sew
+        $bundles = CuttingJobBundle::with([
+            'finishedItem',
+            'cuttingJob.lot.item',
+            'latestCuttingQc', // relation kecil yang tadi
+        ])
+            ->readyForSewing()
             ->orderBy('id')
             ->get();
 
-        return view('production.sewing_pickups.bundle_ready', [
+        return view('production.sewing_pickups.bundles_ready', [
             'bundles' => $bundles,
         ]);
     }
@@ -75,22 +73,26 @@ class SewingPickupController extends Controller
             ->orderBy('code')
             ->get();
 
+        // Kalau masih mau pakai list semua gudang untuk keperluan lain:
         $warehouses = Warehouse::orderBy('code')->get();
 
         $wipCutId = Warehouse::where('code', 'WIP-CUT')->value('id');
+        $wipSewWarehouse = Warehouse::where('code', 'WIP-SEW')->firstOrFail();
+
         $bundles = CuttingJobBundle::readyForSewing($wipCutId)
-            ->with(['finishedItem', 'cuttingJob.lot.item'])
+            ->with(['finishedItem', 'cuttingJob.lot.item', 'qcResults'])
             ->get();
 
         return view('production.sewing_pickups.create', [
             'operators' => $operators,
             'warehouses' => $warehouses,
+            'wipSewWarehouse' => $wipSewWarehouse,
             'bundles' => $bundles,
         ]);
     }
-
     public function store(Request $request)
     {
+        // HAPUS dd() supaya fungsi jalan normal
         $validated = $request->validate([
             'date' => ['required', 'date'],
             'warehouse_id' => ['required', 'exists:warehouses,id'], // gudang sewing (WIP-SEW)
@@ -99,7 +101,7 @@ class SewingPickupController extends Controller
 
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.bundle_id' => ['required', 'exists:cutting_job_bundles,id'],
-            'lines.*.qty_bundle' => ['required', 'numeric', 'min:0'], // boleh 0, nanti di-skip
+            'lines.*.qty_bundle' => ['nullable', 'numeric', 'min:0'], // boleh 0, nanti di-skip
         ], [
             'lines.required' => 'Minimal satu baris bundle harus diisi.',
             'lines.*.bundle_id.required' => 'Bundle tidak valid.',
@@ -141,13 +143,13 @@ class SewingPickupController extends Controller
                 }
 
                 // Ambil bundle + QC Cutting (stage = cutting)
+                /** @var \App\Models\CuttingJobBundle|null $bundle */
                 $bundle = CuttingJobBundle::with([
                     'qcResults' => function ($q) {
                         $q->where('stage', 'cutting');
                     },
                     'cuttingJob',
-                ])
-                    ->find($row['bundle_id']);
+                ])->find($row['bundle_id']);
 
                 if (!$bundle) {
                     continue;
@@ -158,22 +160,39 @@ class SewingPickupController extends Controller
                     ->sortByDesc('qc_date')
                     ->first();
 
-                // Batas maksimum qty pickup:
+                // Batas maksimum qty hasil QC
                 // - kalau ada QC → pakai qty_ok
                 // - kalau belum ada QC → fallback ke qty_pcs
                 if ($lastQc && $lastQc->qty_ok !== null) {
-                    $maxQty = (float) $lastQc->qty_ok;
+                    $maxQtyOk = (float) $lastQc->qty_ok;
                 } else {
-                    $maxQty = (float) $bundle->qty_pcs;
+                    $maxQtyOk = (float) $bundle->qty_pcs;
                 }
 
-                if ($maxQty <= 0) {
+                if ($maxQtyOk <= 0) {
                     // tidak ada qty OK yang bisa dijahit
                     continue;
                 }
 
-                if ($qty > $maxQty) {
-                    $qty = $maxQty;
+                // ========= LOGIKA “STOK BUNDLE TERSISA” =========
+                // Ambil qty yang sudah pernah dipick ke sewing
+                $alreadyPicked = (float) ($bundle->sewing_picked_qty ?? 0);
+
+                // Sisa qty yang masih boleh di-pick
+                $remaining = max($maxQtyOk - $alreadyPicked, 0);
+
+                if ($remaining <= 0) {
+                    // bundle ini sudah habis dipick sebelumnya
+                    continue;
+                }
+
+                // Batasi qty request ke sisa yang masih ada
+                if ($qty > $remaining) {
+                    $qty = $remaining;
+                }
+
+                if ($qty <= 0) {
+                    continue;
                 }
 
                 // 🔹 Simpan detail sewing pickup
@@ -184,6 +203,24 @@ class SewingPickupController extends Controller
                     'qty_bundle' => $qty,
                     'status' => 'in_progress',
                 ]);
+
+                // 🔹 UPDATE “STOK” BUNDLE (akumulasi qty yang sudah dipick)
+                $newPicked = $alreadyPicked + $qty;
+
+                // Clamp supaya tidak lebih dari maxQtyOk (jaga-jaga)
+                if ($newPicked > $maxQtyOk) {
+                    $newPicked = $maxQtyOk;
+                }
+
+                $bundle->sewing_picked_qty = $newPicked;
+
+                // Opsional: update status bundle kalau sudah habis
+                if ($newPicked >= $maxQtyOk) {
+                    // misal: bundle sudah full dikirim ke sewing
+                    $bundle->status = 'in_sewing'; // sesuaikan dengan enum/status kamu
+                }
+
+                $bundle->save();
 
                 // 🔹 INVENTORY: WIP-CUT → WIP-SEW
                 $notes = "Sewing pickup {$pickup->code} - bundle {$bundle->bundle_code}";
@@ -220,14 +257,14 @@ class SewingPickupController extends Controller
             // Kalau tidak ada satupun line valid, batal & lempar error
             if ($createdLines === 0) {
                 throw ValidationException::withMessages([
-                    'lines' => 'Minimal satu bundle harus punya Qty Pickup > 0 dan qty OK dari QC.',
+                    'lines' => 'Minimal satu bundle harus punya Qty Pickup > 0 dan qty OK dari QC yang masih tersisa.',
                 ]);
             }
         });
 
         return redirect()
             ->route('production.sewing_pickups.index')
-            ->with('success', 'Sewing pickup berhasil dibuat dan stok sudah dipindahkan dari WIP-CUT ke gudang sewing.');
+            ->with('success', 'Sewing pickup berhasil dibuat dan stok sudah dipindahkan dari WIP-CUT ke gudang sewing + bundle ter-update sisa qty-nya.');
     }
 
 }

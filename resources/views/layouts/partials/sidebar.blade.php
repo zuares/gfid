@@ -4,8 +4,11 @@
     $poOpen = request()->routeIs('purchasing.purchase_orders.*');
     $grnOpen = request()->routeIs('purchasing.purchase_receipts.*');
 
-    // Inventory internal (stock card + transfers)
-    $invOpen = request()->routeIs('inventory.stock_card.*') || request()->routeIs('inventory.transfers.*');
+    // Inventory internal (stock card + transfers + stock items/lots)
+    $invOpen =
+        request()->routeIs('inventory.stock_card.*') ||
+        request()->routeIs('inventory.transfers.*') ||
+        request()->routeIs('inventory.stocks.*');
 
     // Inventory external transfers
     $extInvOpen = request()->routeIs('inventory.external_transfers.*');
@@ -13,12 +16,17 @@
     // Production Cutting Jobs
     $prodCutOpen = request()->routeIs('production.cutting_jobs.*');
 
-    // Production QC (cutting / sewing nanti)
-    $prodQcOpen = request()->routeIs('production.qc.*');
-
     // Production Sewing (pickups + returns)
     $prodSewOpen =
         request()->routeIs('production.sewing_pickups.*') || request()->routeIs('production.sewing_returns.*');
+
+    // Production Finishing
+    $prodFinOpen =
+        request()->routeIs('production.finishing_jobs.*') ||
+        request()->routeIs('production.finishing_jobs.bundles_ready');
+
+    // Production QC (cutting / sewing nanti)
+    $prodQcOpen = request()->routeIs('production.qc.*');
 
     // Production Reports (cutting→sewing loss, daily, operator, reject detail, per item, ageing WIP)
     $prodReportOpen =
@@ -63,7 +71,6 @@
             scrollbar-color: rgba(148, 163, 184, .4) transparent;
         }
 
-        /* Biar konten geser ke kanan 240px */
         .app-main {
             margin-left: 240px;
         }
@@ -134,7 +141,6 @@
         transform: translateX(1px);
     }
 
-    /* ACTIVE UTAMA: cukup garis halus di kiri, tanpa glass */
     .sidebar-link.active {
         background: transparent;
         font-weight: 600;
@@ -142,7 +148,6 @@
         color: var(--accent);
     }
 
-    /* GROUP TOGGLE (header collapse) */
     .sidebar-toggle {
         cursor: pointer;
         border: 0;
@@ -162,7 +167,6 @@
         transform: rotate(90deg);
     }
 
-    /* Saat group open: tanpa glass, cuma accent tipis */
     .sidebar-toggle.is-open {
         background: transparent;
         box-shadow: none;
@@ -174,7 +178,6 @@
         color: var(--accent);
     }
 
-    /* SUB LINK: List & Create di dalam collapse */
     .sidebar-link-sub {
         position: relative;
         font-size: .86rem;
@@ -188,14 +191,12 @@
         font-size: .9rem;
     }
 
-    /* Hover submenu: lebih transparan, tanpa geser */
     .sidebar-link-sub:hover {
         background: color-mix(in srgb, var(--accent-soft) 16%, var(--card) 84%);
         box-shadow: inset 0 0 0 1px var(--line);
         transform: none;
     }
 
-    /* Active SUBMENU: hanya penanda garis + dot kecil, tanpa glass */
     .sidebar-link-sub.active {
         background: transparent;
         font-weight: 600;
@@ -235,7 +236,7 @@
         {{-- PURCHASING --}}
         <li class="mt-2 text-uppercase small menu-label">Purchasing</li>
 
-        {{-- GROUP: Purchase Orders --}}
+        {{-- Purchase Orders --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $poOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navPurchasingPO"
@@ -260,7 +261,7 @@
             </div>
         </li>
 
-        {{-- GROUP: Goods Receipts (GRN) --}}
+        {{-- Goods Receipts --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $grnOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navPurchasingGRN"
@@ -288,7 +289,7 @@
         {{-- INVENTORY --}}
         <li class="mt-2 text-uppercase small menu-label">Inventory</li>
 
-        {{-- GROUP: Inventory Internal (Stock Card + Transfers) --}}
+        {{-- Inventory Internal --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $invOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navInventory"
@@ -299,21 +300,30 @@
             </button>
 
             <div class="collapse {{ $invOpen ? 'show' : '' }}" id="navInventory">
-                {{-- Kartu Stok --}}
+                <a href="{{ route('inventory.stocks.items') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('inventory.stocks.items') ? 'active' : '' }}">
+                    <span class="icon">📦</span>
+                    <span>Stok per Item</span>
+                </a>
+
+                <a href="{{ route('inventory.stocks.lots') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('inventory.stocks.lots') ? 'active' : '' }}">
+                    <span class="icon">🎫</span>
+                    <span>Stok per LOT</span>
+                </a>
+
                 <a href="{{ route('inventory.stock_card.index') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('inventory.stock_card.index') ? 'active' : '' }}">
                     <span class="icon">📋</span>
                     <span>Kartu Stok</span>
                 </a>
 
-                {{-- Daftar Transfer --}}
                 <a href="{{ route('inventory.transfers.index') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('inventory.transfers.index') ? 'active' : '' }}">
                     <span class="icon">🔁</span>
                     <span>Daftar Transfer</span>
                 </a>
 
-                {{-- Transfer Baru --}}
                 <a href="{{ route('inventory.transfers.create') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('inventory.transfers.create') ? 'active' : '' }}">
                     <span class="icon">➕</span>
@@ -322,7 +332,7 @@
             </div>
         </li>
 
-        {{-- GROUP: External Transfers --}}
+        {{-- External Transfers --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $extInvOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navInventoryExternal"
@@ -350,7 +360,7 @@
         {{-- PRODUCTION --}}
         <li class="mt-2 text-uppercase small menu-label">Production</li>
 
-        {{-- GROUP: Cutting Jobs --}}
+        {{-- Cutting Jobs --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $prodCutOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navProductionCutting"
@@ -375,7 +385,7 @@
             </div>
         </li>
 
-        {{-- GROUP: Sewing (Pickups + Returns) --}}
+        {{-- Sewing --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $prodSewOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navProductionSewing"
@@ -386,7 +396,6 @@
             </button>
 
             <div class="collapse {{ $prodSewOpen ? 'show' : '' }}" id="navProductionSewing">
-                {{-- Sewing Pickups --}}
                 <a href="{{ route('production.sewing_pickups.index') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_pickups.index') ? 'active' : '' }}">
                     <span class="icon">📤</span>
@@ -399,7 +408,6 @@
                     <span>Pickup Baru</span>
                 </a>
 
-                {{-- Sewing Returns --}}
                 <a href="{{ route('production.sewing_returns.index') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_returns.index') ? 'active' : '' }}">
                     <span class="icon">📥</span>
@@ -414,7 +422,38 @@
             </div>
         </li>
 
-        {{-- GROUP: Production QC --}}
+        {{-- Finishing --}}
+        <li class="mb-1">
+            <button class="sidebar-link sidebar-toggle {{ $prodFinOpen ? 'is-open' : '' }}" type="button"
+                data-bs-toggle="collapse" data-bs-target="#navProductionFinishing"
+                aria-expanded="{{ $prodFinOpen ? 'true' : 'false' }}" aria-controls="navProductionFinishing">
+                <span class="icon">🧶</span>
+                <span>Finishing</span>
+                <span class="chevron">▸</span>
+            </button>
+
+            <div class="collapse {{ $prodFinOpen ? 'show' : '' }}" id="navProductionFinishing">
+                <a href="{{ route('production.finishing_jobs.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.finishing_jobs.index') ? 'active' : '' }}">
+                    <span class="icon">≡</span>
+                    <span>Daftar Finishing Job</span>
+                </a>
+
+                <a href="{{ route('production.finishing_jobs.create') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.finishing_jobs.create') ? 'active' : '' }}">
+                    <span class="icon">＋</span>
+                    <span>Finishing Job Baru</span>
+                </a>
+
+                <a href="{{ route('production.finishing_jobs.bundles_ready') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.finishing_jobs.bundles_ready') ? 'active' : '' }}">
+                    <span class="icon">📦</span>
+                    <span>Bundles Ready for Finishing</span>
+                </a>
+            </div>
+        </li>
+
+        {{-- Quality Control --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $prodQcOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navProductionQc"
@@ -425,24 +464,16 @@
             </button>
 
             <div class="collapse {{ $prodQcOpen ? 'show' : '' }}" id="navProductionQc">
-                {{-- QC Cutting (index + edit/update) --}}
                 <a href="{{ route('production.qc.index') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.qc.index') || request()->routeIs('production.qc.cutting.*') ? 'active' : '' }}">
                     <span class="icon">✂️</span>
                     <span>QC Cutting</span>
                 </a>
-
-                {{-- Placeholder QC Sewing kalau nanti ada --}}
-                {{--
-                <a href="#" class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.qc.sewing.*') ? 'active' : '' }}">
-                    <span class="icon">🧵</span>
-                    <span>QC Sewing</span>
-                </a>
-                --}}
+                {{-- nanti: QC Sewing, QC Packing --}}
             </div>
         </li>
 
-        {{-- GROUP: Laporan Produksi --}}
+        {{-- Laporan Produksi --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $prodReportOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navProductionReports"
@@ -453,42 +484,36 @@
             </button>
 
             <div class="collapse {{ $prodReportOpen ? 'show' : '' }}" id="navProductionReports">
-                {{-- Daily Production --}}
                 <a href="{{ route('production.reports.daily_production') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.daily_production') ? 'active' : '' }}">
                     <span class="icon">📅</span>
                     <span>Rekap Harian Produksi</span>
                 </a>
 
-                {{-- Cutting → Sewing Loss --}}
                 <a href="{{ route('production.reports.cutting_to_sewing_loss') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.cutting_to_sewing_loss') ? 'active' : '' }}">
                     <span class="icon">↔︎</span>
                     <span>Cutting → Sewing Loss</span>
                 </a>
 
-                {{-- Performa Operator Jahit --}}
                 <a href="{{ route('production.sewing_returns.report_operators') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_returns.report_operators') ? 'active' : '' }}">
                     <span class="icon">🧍</span>
                     <span>Performa Operator Jahit</span>
                 </a>
 
-                {{-- Performa Jahit per Item --}}
                 <a href="{{ route('production.reports.sewing_per_item') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.sewing_per_item') ? 'active' : '' }}">
                     <span class="icon">🧵</span>
                     <span>Performa Jahit per Item</span>
                 </a>
 
-                {{-- Ageing WIP Sewing --}}
                 <a href="{{ route('production.reports.wip_sewing_age') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.wip_sewing_age') ? 'active' : '' }}">
                     <span class="icon">⏳</span>
                     <span>Ageing WIP Sewing</span>
                 </a>
 
-                {{-- Reject Detail --}}
                 <a href="{{ route('production.reports.reject_detail') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.reject_detail') ? 'active' : '' }}">
                     <span class="icon">⚠️</span>

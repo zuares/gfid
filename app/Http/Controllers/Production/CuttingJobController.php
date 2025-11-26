@@ -57,7 +57,19 @@ class CuttingJobController extends Controller
     public function create(Request $request)
     {
         // semua LOT dengan saldo > 0 (sudah include relasi lot.item & warehouse di service)
-        $lotStocks = $this->inventory->getAvailableLots();
+        // cari gudang RM
+        $rmWarehouseId = Warehouse::where('code', 'RM')->value('id');
+
+        if (!$rmWarehouseId) {
+            // optional: bisa dibikin redirect / error yang lebih halus
+            throw new \RuntimeException('Warehouse RM belum dikonfigurasi di tabel warehouses.');
+        }
+
+        // semua LOT dengan saldo > 0 khusus di gudang RM
+        $lotStocks = $this->inventory->getAvailableLots(
+            warehouseId: $rmWarehouseId,
+            itemId: null, // bisa diisi kalau mau filter per item
+        );
 
         // ambil lot_id dari query (ketika user klik "Input Outputs")
         $selectedLotId = $request->get('lot_id') ?? old('lot_id');

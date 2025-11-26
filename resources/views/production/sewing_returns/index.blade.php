@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Produksi • Sewing Return')
+@section('title', 'Produksi • Sewing Returns')
 
 @push('head')
     <style>
@@ -12,177 +12,409 @@
         .card {
             background: var(--card);
             border: 1px solid var(--line);
-            border-radius: 14px;
+            border-radius: 16px;
         }
 
         .mono {
             font-variant-numeric: tabular-nums;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono";
         }
 
         .help {
             color: var(--muted);
-            font-size: .85rem;
+            font-size: .82rem;
         }
 
         .badge-soft {
             border-radius: 999px;
-            padding: .15rem .5rem;
+            padding: .15rem .55rem;
             font-size: .7rem;
         }
 
         .table-wrap {
             overflow-x: auto;
         }
+
+        .status-pill {
+            border-radius: 999px;
+            padding: .15rem .7rem;
+            font-size: .72rem;
+        }
+
+        .filter-label {
+            font-size: .74rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--muted);
+        }
+
+        .table-sewing-return-index th {
+            font-size: .74rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--muted);
+            border-top: none;
+        }
+
+        .sr-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: .5rem;
+            margin-bottom: .2rem;
+        }
+
+        .sr-code {
+            font-size: .9rem;
+            font-weight: 600;
+        }
+
+        .sr-meta {
+            font-size: .78rem;
+            color: var(--muted);
+        }
+
+        /* ============ MOBILE ============ */
+        @media (max-width: 767.98px) {
+            .page-wrap {
+                padding-inline: .75rem;
+                padding-bottom: 5rem;
+            }
+
+            .card {
+                border-radius: 14px;
+            }
+
+            .header-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: .6rem;
+            }
+
+            .header-actions {
+                display: flex;
+                gap: .5rem;
+            }
+
+            .header-actions .btn {
+                flex: 1;
+                justify-content: center;
+            }
+
+            .filter-row {
+                flex-direction: column;
+            }
+
+            .table-sewing-return-index {
+                border-collapse: separate;
+                border-spacing: 0 .55rem;
+            }
+
+            .table-sewing-return-index thead {
+                display: none;
+            }
+
+            .table-sewing-return-index tbody tr {
+                display: block;
+                border-radius: 12px;
+                border: 1px solid var(--line);
+                padding: .6rem .7rem;
+                background: var(--card);
+                margin-bottom: .4rem;
+            }
+
+            .table-sewing-return-index tbody tr:last-child {
+                margin-bottom: 0;
+            }
+
+            .table-sewing-return-index td {
+                display: block;
+                border: none !important;
+                padding: .06rem 0;
+                font-size: .8rem;
+            }
+
+            .sr-meta-inline {
+                display: flex;
+                flex-wrap: wrap;
+                gap: .15rem .6rem;
+                margin-top: .15rem;
+            }
+
+            .sr-meta-chip {
+                font-size: .75rem;
+                color: var(--muted);
+            }
+
+            .sr-amounts {
+                margin-top: .25rem;
+                display: flex;
+                justify-content: flex-start;
+                gap: .75rem;
+                font-size: .78rem;
+            }
+
+            .sr-amounts span {
+                white-space: nowrap;
+            }
+
+            .sr-link {
+                margin-top: .25rem;
+            }
+        }
+
+        /* ============ DESKTOP ============ */
+        @media (min-width: 768px) {
+            .filter-row .col-auto {
+                display: flex;
+                align-items: flex-end;
+            }
+        }
     </style>
 @endpush
 
 @section('content')
     @php
-        $filters = $filters ?? [];
+        $statusOptions = [
+            '' => 'Semua',
+            'posted' => 'Posted',
+            'closed' => 'Closed',
+            'draft' => 'Draft',
+        ];
     @endphp
 
-    <div class="page-wrap">
+    <div class="page-wrap py-3 py-md-4">
 
-        {{-- HEADER --}}
-        <div class="card p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        {{-- HEADER + FILTER --}}
+        <div class="card p-3 p-md-4 mb-3">
+            <div class="d-flex justify-content-between align-items-start header-row">
                 <div>
-                    <h1 class="h5 mb-1">Sewing Return</h1>
+                    <h1 class="h5 mb-1">Sewing Returns</h1>
                     <div class="help">
-                        Daftar hasil jahit yang sudah diposting dari WIP Sewing ke WIP Finishing / REJECT.
+                        Rekap semua setoran hasil jahit dari WIP-SEW ke WIP-FIN.
                     </div>
                 </div>
 
-                <a href="{{ route('production.sewing_pickups.index') }}" class="btn btn-sm btn-outline-secondary">
-                    &larr; Kembali ke Sewing Pickup
-                </a>
+                <div class="header-actions">
+                    <a href="{{ route('production.sewing_pickups.index') }}"
+                        class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+                        <i class="bi bi-arrow-left"></i>
+                        <span>Ke Sewing Pickup</span>
+                    </a>
+                    {{-- kalau nanti mau tambah tombol create manual, taruh di sini --}}
+                </div>
             </div>
 
             {{-- FILTERS --}}
-            <form method="get" class="row g-2 mt-3">
-                <div class="col-md-3 col-6">
-                    <div class="help mb-1">Tanggal dari</div>
-                    <input type="date" name="date_from" class="form-control form-control-sm"
-                        value="{{ $filters['date_from'] ?? '' }}">
+            <form method="get" class="mt-3">
+                <div class="row g-2 filter-row">
+                    <div class="col-6 col-md-2">
+                        <div class="filter-label mb-1">Dari</div>
+                        <input type="date" name="from_date" value="{{ $filters['from_date'] }}"
+                            class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="filter-label mb-1">Sampai</div>
+                        <input type="date" name="to_date" value="{{ $filters['to_date'] }}"
+                            class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="filter-label mb-1">Operator</div>
+                        <select name="operator_id" class="form-select form-select-sm">
+                            <option value="">Semua operator</option>
+                            @foreach ($operators as $op)
+                                <option value="{{ $op->id }}"
+                                    {{ (string) $filters['operator_id'] === (string) $op->id ? 'selected' : '' }}>
+                                    {{ $op->code }} — {{ $op->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="filter-label mb-1">Status</div>
+                        <select name="status" class="form-select form-select-sm">
+                            @foreach ($statusOptions as $value => $label)
+                                <option value="{{ $value }}" {{ $filters['status'] === $value ? 'selected' : '' }}>
+                                    {{ $label }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <div class="filter-label mb-1">Cari</div>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light border-end-0">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" name="q" value="{{ $filters['q'] }}"
+                                class="form-control border-start-0" placeholder="Kode return / pickup / operator...">
+                            @if (array_filter($filters))
+                                <button class="btn btn-outline-secondary" type="submit" name="reset" value="1"
+                                    onclick="window.location='{{ route('production.sewing_returns.index') }}';return false;">
+                                    Reset
+                                </button>
+                            @endif
+                        </div>
+                    </div>
                 </div>
 
-                <div class="col-md-3 col-6">
-                    <div class="help mb-1">Tanggal sampai</div>
-                    <input type="date" name="date_to" class="form-control form-control-sm"
-                        value="{{ $filters['date_to'] ?? '' }}">
-                </div>
-
-                <div class="col-md-3 col-6">
-                    <div class="help mb-1">Operator Jahit</div>
-                    <select name="operator_id" class="form-select form-select-sm">
-                        <option value="">-- Semua Operator --</option>
-                        @foreach ($operators as $op)
-                            <option value="{{ $op->id }}"
-                                {{ isset($filters['operator_id']) && (int) $filters['operator_id'] === $op->id ? 'selected' : '' }}>
-                                {{ $op->code }} — {{ $op->name }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <div class="col-md-3 col-6 d-flex align-items-end gap-2">
+                <div class="mt-2 d-flex justify-content-end">
                     <button type="submit" class="btn btn-sm btn-primary">
-                        Filter
+                        Terapkan Filter
                     </button>
-                    <a href="{{ route('production.sewing_returns.index') }}" class="btn btn-sm btn-outline-secondary">
-                        Reset
-                    </a>
                 </div>
             </form>
         </div>
 
-        {{-- FLASH MESSAGE --}}
-        @if (session('success'))
-            <div class="alert alert-success py-2">
-                {{ session('success') }}
+        {{-- LIST / TABLE --}}
+        <div class="card p-3 p-md-4 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h6 mb-0">Daftar Sewing Return</h2>
+                <div class="help mb-0">
+                    Menampilkan {{ $returns->firstItem() ?? 0 }}–{{ $returns->lastItem() ?? 0 }}
+                    dari {{ $returns->total() }} data.
+                </div>
             </div>
-        @endif
-
-        {{-- TABLE --}}
-        <div class="card p-3">
-            <h2 class="h6 mb-2">Daftar Sewing Return</h2>
 
             <div class="table-wrap">
-                <table class="table table-sm align-middle mono">
+                <table class="table table-sm align-middle mono table-sewing-return-index mb-0">
                     <thead>
                         <tr>
-                            <th style="width: 40px;">#</th>
-                            <th style="width: 130px;">Code</th>
-                            <th style="width: 100px;">Tanggal</th>
-                            <th style="width: 160px;">Gudang Sewing</th>
-                            <th style="width: 170px;">Operator Jahit</th>
-                            <th style="width: 150px;">Lines</th>
-                            <th style="width: 150px;">Total OK / Reject</th>
+                            <th style="width: 110px;">Tanggal</th>
+                            <th style="width: 140px;">Kode</th>
+                            <th style="width: 160px;">Operator</th>
+                            <th style="width: 150px;">Pickup</th>
+                            <th style="width: 110px;" class="text-end">Total OK</th>
+                            <th style="width: 110px;" class="text-end">Total Reject</th>
                             <th style="width: 110px;">Status</th>
-                            <th style="width: 90px;"></th>
+                            <th style="width: 80px;"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($returns as $return)
+                        @forelse ($returns as $ret)
                             @php
-                                $totalLines = $return->lines->count();
-                                $totalOk = $return->lines->sum('qty_ok');
-                                $totalReject = $return->lines->sum('qty_reject');
+                                $totalOk = $ret->lines->sum('qty_ok');
+                                $totalReject = $ret->lines->sum('qty_reject');
 
                                 $statusMap = [
-                                    'draft' => ['label' => 'DRAFT', 'class' => 'secondary'],
-                                    'posted' => ['label' => 'POSTED', 'class' => 'primary'],
-                                    'closed' => ['label' => 'CLOSED', 'class' => 'success'],
+                                    'draft' => ['label' => 'Draft', 'class' => 'secondary'],
+                                    'posted' => ['label' => 'Posted', 'class' => 'primary'],
+                                    'closed' => ['label' => 'Closed', 'class' => 'success'],
                                 ];
-
-                                $cfg = $statusMap[$return->status] ?? [
-                                    'label' => strtoupper($return->status ?? '-'),
+                                $cfg = $statusMap[$ret->status] ?? [
+                                    'label' => strtoupper($ret->status ?? '-'),
                                     'class' => 'secondary',
                                 ];
                             @endphp
                             <tr>
-                                <td>{{ $loop->iteration + ($returns->currentPage() - 1) * $returns->perPage() }}</td>
-                                <td>{{ $return->code }}</td>
-                                <td>{{ $return->date?->format('Y-m-d') ?? $return->date }}</td>
-                                <td>
-                                    {{ $return->warehouse?->code ?? '-' }}
-                                    @if ($return->warehouse)
-                                        <span class="badge-soft bg-light border text-muted">
-                                            {{ $return->warehouse->name }}
-                                        </span>
-                                    @endif
+                                {{-- DESKTOP VIEW --}}
+                                <td class="d-none d-md-table-cell">
+                                    {{ $ret->date?->format('Y-m-d') ?? $ret->date }}
                                 </td>
-                                <td>
-                                    @if ($return->operator)
-                                        {{ $return->operator->code }} — {{ $return->operator->name }}
+                                <td class="d-none d-md-table-cell">
+                                    <a href="{{ route('production.sewing_returns.show', $ret) }}">
+                                        {{ $ret->code }}
+                                    </a>
+                                </td>
+                                <td class="d-none d-md-table-cell">
+                                    @if ($ret->operator)
+                                        {{ $ret->operator->code }} — {{ $ret->operator->name }}
                                     @else
-                                        -
+                                        <span class="text-muted">-</span>
                                     @endif
                                 </td>
-                                <td>
-                                    {{ $totalLines }} baris
+                                <td class="d-none d-md-table-cell">
+                                    @if ($ret->pickup)
+                                        <a href="{{ route('production.sewing_pickups.show', $ret->pickup) }}">
+                                            {{ $ret->pickup->code }}
+                                        </a>
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
                                 </td>
-                                <td>
-                                    OK: {{ number_format($totalOk, 2, ',', '.') }} /
-                                    Rj: {{ number_format($totalReject, 2, ',', '.') }}
+                                <td class="text-end d-none d-md-table-cell">
+                                    {{ number_format($totalOk, 2, ',', '.') }}
                                 </td>
-                                <td>
-                                    <span class="badge bg-{{ $cfg['class'] }}">
+                                <td class="text-end d-none d-md-table-cell {{ $totalReject > 0 ? 'text-danger' : '' }}">
+                                    {{ number_format($totalReject, 2, ',', '.') }}
+                                </td>
+                                <td class="d-none d-md-table-cell">
+                                    <span class="status-pill bg-{{ $cfg['class'] }} text-light">
                                         {{ $cfg['label'] }}
                                     </span>
                                 </td>
-                                <td>
-                                    <a href="{{ route('production.sewing_returns.show', $return) }}"
+                                <td class="text-end d-none d-md-table-cell">
+                                    <a href="{{ route('production.sewing_returns.show', $ret) }}"
                                         class="btn btn-sm btn-outline-primary">
                                         Detail
                                     </a>
                                 </td>
+
+                                {{-- MOBILE CARD VIEW --}}
+                                <td colspan="8" class="d-md-none">
+                                    <div class="sr-card-header">
+                                        <div>
+                                            <div class="sr-code">
+                                                <a href="{{ route('production.sewing_returns.show', $ret) }}">
+                                                    {{ $ret->code }}
+                                                </a>
+                                            </div>
+                                            <div class="sr-meta">
+                                                {{ $ret->date?->format('Y-m-d') ?? $ret->date }}
+                                            </div>
+                                        </div>
+                                        <span class="status-pill bg-{{ $cfg['class'] }} text-light">
+                                            {{ $cfg['label'] }}
+                                        </span>
+                                    </div>
+
+                                    <div class="sr-meta-inline">
+                                        <span class="sr-meta-chip">
+                                            Op:
+                                            @if ($ret->operator)
+                                                {{ $ret->operator->code }}
+                                            @else
+                                                -
+                                            @endif
+                                        </span>
+                                        <span class="sr-meta-chip">
+                                            Pickup:
+                                            @if ($ret->pickup)
+                                                {{ $ret->pickup->code }}
+                                            @else
+                                                -
+                                            @endif
+                                        </span>
+                                    </div>
+
+                                    <div class="sr-amounts">
+                                        <span>
+                                            OK:
+                                            {{ number_format($totalOk, 2, ',', '.') }}
+                                        </span>
+                                        <span class="{{ $totalReject > 0 ? 'text-danger' : '' }}">
+                                            RJ:
+                                            {{ number_format($totalReject, 2, ',', '.') }}
+                                        </span>
+                                    </div>
+
+                                    @if ($ret->notes)
+                                        <div class="mt-1 text-muted small">
+                                            {{ \Illuminate\Support\Str::limit($ret->notes, 80) }}
+                                        </div>
+                                    @endif
+
+                                    <div class="sr-link">
+                                        <a href="{{ route('production.sewing_returns.show', $ret) }}" class="small">
+                                            Lihat detail →
+                                        </a>
+                                    </div>
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" class="text-center text-muted small">
-                                    Belum ada Sewing Return.
+                                <td colspan="8" class="text-center text-muted small py-3">
+                                    Belum ada Sewing Return yang tersimpan.
                                 </td>
                             </tr>
                         @endforelse
@@ -190,12 +422,17 @@
                 </table>
             </div>
 
-            @if ($returns instanceof \Illuminate\Pagination\AbstractPaginator)
-                <div class="mt-2">
-                    {{ $returns->links() }}
+            {{-- PAGINATION --}}
+            @if ($returns->hasPages())
+                <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="small text-muted">
+                        Halaman {{ $returns->currentPage() }} dari {{ $returns->lastPage() }}
+                    </div>
+                    <div>
+                        {{ $returns->links() }}
+                    </div>
                 </div>
             @endif
         </div>
-
     </div>
 @endsection

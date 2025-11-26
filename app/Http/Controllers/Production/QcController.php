@@ -126,10 +126,7 @@ class QcController extends Controller
     {
         $validated = $request->validate([
             'qc_date' => ['required', 'date'],
-
-            // operator QC diambil dari form — kalau mau otomatis operator login ganti nanti
             'operator_id' => ['nullable', 'exists:employees,id'],
-
             'results' => ['required', 'array', 'min:1'],
             'results.*.bundle_id' => ['required', 'exists:cutting_job_bundles,id'],
             'results.*.qty_ok' => ['nullable', 'numeric', 'min:0'],
@@ -141,13 +138,22 @@ class QcController extends Controller
             'results.*.bundle_id.required' => 'Bundle tidak valid.',
         ]);
 
-        // ✔ Simpan QC hasil per bundle ke dalam database
-        $this->qcCutting->saveCuttingQc($cuttingJob, $validated);
+        // fallback operator_id dari user login (kalau ada relasi employee)
+        if (empty($validated['operator_id']) && auth()->check() && method_exists(auth()->user(), 'employee')) {
+            $validated['operator_id'] = auth()->user()->employee?->id;
+        }
 
-        // ✔ UPDATE STATUS CUTTING JOB → qc_done
+        try {
+            $this->qcCutting->saveCuttingQc($cuttingJob, $validated);
+        } catch (\RuntimeException $e) {
+            return back()
+                ->withInput()
+                ->with('error', 'QC gagal: ' . $e->getMessage());
+        }
+
         $cuttingJob->update([
             'status' => 'qc_done',
-            'created_by' => $validated['operator_id'] ?? auth()->id(), // sebagai fallback
+            'created_by' => auth()->id(),
         ]);
 
         return redirect()

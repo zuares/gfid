@@ -16,6 +16,7 @@ class SewingReturn extends Model
         'operator_id',
         'status',
         'notes',
+        'pickup_id',
     ];
 
     protected $casts = [
@@ -35,5 +36,10 @@ class SewingReturn extends Model
     public function warehouse()
     {
         return $this->belongsTo(Warehouse::class, 'warehouse_id');
+    }
+
+    public function pickup()
+    {
+        return $this->belongsTo(SewingPickup::class, 'pickup_id');
     }
 }

@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Production;
 use App\Http\Controllers\Controller;
 use App\Models\CuttingJob;
 use App\Models\Employee;
+use App\Models\FinishingJobLine;
 use App\Models\Item;
 use App\Models\QcResult;
 use App\Models\SewingPickupLine;
 use App\Models\SewingReturn;
 use App\Models\SewingReturnLine;
 use App\Models\Warehouse;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -19,7 +21,6 @@ class ProductionReportController extends Controller
     /**
      * 2️⃣ Laporan Performa Cutting → Sewing (Lead Time & Loss)
      */
-
     public function cuttingToSewingLoss(Request $request)
     {
         $dateFrom = $request->get('date_from');
@@ -34,41 +35,41 @@ class ProductionReportController extends Controller
             ])
             ->select('cutting_jobs.*')
             ->addSelect(DB::raw('
-            -- Qty OK hasil QC Cutting
-            (
-                select coalesce(sum(qc.qty_ok), 0)
-                from qc_results qc
-                join cutting_job_bundles b on b.id = qc.cutting_job_bundle_id
-                where qc.stage = \'cutting\'
-                  and b.cutting_job_id = cutting_jobs.id
-            ) as qty_cut_ok,
+                -- Qty OK hasil QC Cutting
+                (
+                    select coalesce(sum(qc.qty_ok), 0)
+                    from qc_results qc
+                    join cutting_job_bundles b on b.id = qc.cutting_job_bundle_id
+                    where qc.stage = \'cutting\'
+                      and b.cutting_job_id = cutting_jobs.id
+                ) as qty_cut_ok,
 
-            -- Total qty yang pernah dipickup ke Sewing
-            (
-                select coalesce(sum(pl.qty_bundle), 0)
-                from cutting_job_bundles b2
-                join sewing_pickup_lines pl on pl.cutting_job_bundle_id = b2.id
-                where b2.cutting_job_id = cutting_jobs.id
-            ) as qty_picked,
+                -- Total qty yang pernah dipickup ke Sewing
+                (
+                    select coalesce(sum(pl.qty_bundle), 0)
+                    from cutting_job_bundles b2
+                    join sewing_pickup_lines pl on pl.cutting_job_bundle_id = b2.id
+                    where b2.cutting_job_id = cutting_jobs.id
+                ) as qty_picked,
 
-            -- Total OK di Sewing Return
-            (
-                select coalesce(sum(rl.qty_ok), 0)
-                from cutting_job_bundles b3
-                join sewing_pickup_lines pl2 on pl2.cutting_job_bundle_id = b3.id
-                join sewing_return_lines rl on rl.sewing_pickup_line_id = pl2.id
-                where b3.cutting_job_id = cutting_jobs.id
-            ) as qty_sewing_ok,
+                -- Total OK di Sewing Return
+                (
+                    select coalesce(sum(rl.qty_ok), 0)
+                    from cutting_job_bundles b3
+                    join sewing_pickup_lines pl2 on pl2.cutting_job_bundle_id = b3.id
+                    join sewing_return_lines rl on rl.sewing_pickup_line_id = pl2.id
+                    where b3.cutting_job_id = cutting_jobs.id
+                ) as qty_sewing_ok,
 
-            -- Total Reject di Sewing Return
-            (
-                select coalesce(sum(rl2.qty_reject), 0)
-                from cutting_job_bundles b4
-                join sewing_pickup_lines pl3 on pl3.cutting_job_bundle_id = b4.id
-                join sewing_return_lines rl2 on rl2.sewing_pickup_line_id = pl3.id
-                where b4.cutting_job_id = cutting_jobs.id
-            ) as qty_sewing_reject
-        '));
+                -- Total Reject di Sewing Return
+                (
+                    select coalesce(sum(rl2.qty_reject), 0)
+                    from cutting_job_bundles b4
+                    join sewing_pickup_lines pl3 on pl3.cutting_job_bundle_id = b4.id
+                    join sewing_return_lines rl2 on rl2.sewing_pickup_line_id = pl3.id
+                    where b4.cutting_job_id = cutting_jobs.id
+                ) as qty_sewing_reject
+            '));
 
         // Filter tanggal Cutting Job
         if ($dateFrom) {
@@ -133,7 +134,7 @@ class ProductionReportController extends Controller
 
     /**
      * 4️⃣ Laporan Rekap Harian Produksi (Daily Production Summary)
-     * Source dari SewingReturn + SewingReturnLine.
+     * Source dari QC Cutting + SewingReturn + SewingReturnLine.
      */
     public function dailyProduction(Request $request)
     {
@@ -335,11 +336,12 @@ class ProductionReportController extends Controller
             ]);
 
         if ($from) {
-            $sewingRejects->whereDate('sewingReturns.date', '>=', $from);
+            // FIX: pakai alias tabel "sewing_returns as r"
+            $sewingRejects->whereDate('sewing_returns.date', '>=', $from);
         }
 
         if ($to) {
-            $sewingRejects->whereDate('sewingReturns.date', '<=', $to);
+            $sewingRejects->whereDate('sewing_returns.date', '<=', $to);
         }
 
         if ($operatorId) {
@@ -389,12 +391,16 @@ class ProductionReportController extends Controller
         ]);
     }
 
+    /**
+     * 6️⃣ Laporan WIP Sewing Age (umur WIP di operator jahit)
+     */
     public function wipSewingAge(Request $request)
     {
         $operatorId = $request->get('operator_id');
 
         $q = SewingPickupLine::query()
             ->with([
+                // relasi di model SewingPickupLine harus bernama "pickup"
                 'pickup.operator',
                 'pickup.warehouse',
                 'bundle.finishedItem',
@@ -412,7 +418,8 @@ class ProductionReportController extends Controller
             ->orderByDesc('id')
             ->get()
             ->map(function ($line) {
-                $pickup = $line->sewingPickup;
+                // FIX: gunakan relasi "pickup" (bukan sewingPickup)
+                $pickup = $line->pickup;
                 $pickupDate = $pickup?->date
                 ? \Illuminate\Support\Carbon::parse($pickup->date)
                 : null;
@@ -448,11 +455,15 @@ class ProductionReportController extends Controller
         ]);
     }
 
+    /**
+     * 7️⃣ Laporan Sewing per Item Jadi
+     */
     public function sewingPerItem(Request $request)
     {
         $dateFrom = $request->get('date_from');
         $dateTo = $request->get('date_to');
         $operatorId = $request->get('operator_id');
+        $itemId = $request->get('item_id');
 
         $q = SewingReturn::query()
             ->join('sewing_return_lines as rl', 'rl.sewing_return_id', '=', 'sewing_returns.id')
@@ -460,14 +471,14 @@ class ProductionReportController extends Controller
             ->join('items as it', 'it.id', '=', 'pl.finished_item_id')
             ->leftJoin('employees as op', 'op.id', '=', 'sewing_returns.operator_id')
             ->selectRaw('
-        pl.finished_item_id,
-        it.code as item_code,
-        it.name as item_name,
-        SUM(rl.qty_ok) as total_ok,
-        SUM(rl.qty_reject) as total_reject,
-        COUNT(DISTINCT sewing_returns.operator_id) as total_operators,
-        COUNT(DISTINCT sewing_returns.id) as total_returns
-    ')
+                pl.finished_item_id,
+                it.code as item_code,
+                it.name as item_name,
+                SUM(rl.qty_ok) as total_ok,
+                SUM(rl.qty_reject) as total_reject,
+                COUNT(DISTINCT sewing_returns.operator_id) as total_operators,
+                COUNT(DISTINCT sewing_returns.id) as total_returns
+            ')
             ->groupBy('pl.finished_item_id', 'it.code', 'it.name');
 
         if ($dateFrom) {
@@ -480,6 +491,10 @@ class ProductionReportController extends Controller
 
         if ($operatorId) {
             $q->where('sewing_returns.operator_id', $operatorId);
+        }
+
+        if ($itemId) {
+            $q->where('pl.finished_item_id', $itemId);
         }
 
         $rows = $q->orderBy('it.code')->get();
@@ -503,4 +518,66 @@ class ProductionReportController extends Controller
         ]);
     }
 
+    public function finishingJobs(Request $request)
+    {
+        // Filter tanggal default: 7 hari terakhir
+        $defaultFrom = Carbon::now()->subDays(7)->toDateString();
+        $defaultTo = Carbon::now()->toDateString();
+
+        $dateFrom = $request->input('date_from', $defaultFrom);
+        $dateTo = $request->input('date_to', $defaultTo);
+        $itemId = $request->input('item_id');
+        $operatorId = $request->input('operator_id');
+
+        $query = FinishingJobLine::query()
+            ->join('finishing_jobs', 'finishing_job_lines.finishing_job_id', '=', 'finishing_jobs.id')
+            ->join('items', 'finishing_job_lines.item_id', '=', 'items.id')
+            ->leftJoin('employees', 'finishing_job_lines.operator_id', '=', 'employees.id')
+            ->whereBetween('finishing_jobs.date', [$dateFrom, $dateTo])
+        // hanya job yang sudah diposting supaya stok sudah jalan
+            ->where('finishing_jobs.status', 'posted');
+
+        if ($itemId) {
+            $query->where('finishing_job_lines.item_id', $itemId);
+        }
+
+        if ($operatorId) {
+            $query->where('finishing_job_lines.operator_id', $operatorId);
+        }
+
+        $rows = $query
+            ->selectRaw('
+                items.id     as item_id,
+                items.code   as item_code,
+                items.name   as item_name,
+                SUM(finishing_job_lines.qty_in)      as total_in,
+                SUM(finishing_job_lines.qty_ok)      as total_ok,
+                SUM(finishing_job_lines.qty_reject)  as total_reject
+            ')
+            ->groupBy('items.id', 'items.code', 'items.name')
+            ->orderBy('items.code')
+            ->get();
+
+        // hitung summary
+        $summary = [
+            'total_in' => $rows->sum('total_in'),
+            'total_ok' => $rows->sum('total_ok'),
+            'total_reject' => $rows->sum('total_reject'),
+        ];
+
+        // Data untuk filter dropdown
+        $items = Item::orderBy('code')->get();
+        $operators = Employee::orderBy('name')->get();
+        dd($items);
+        return view('production.reports.finishing_jobs', [
+            'rows' => $rows,
+            'summary' => $summary,
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
+            'itemId' => $itemId,
+            'operatorId' => $operatorId,
+            'items' => $items,
+            'operators' => $operators,
+        ]);
+    }
 }

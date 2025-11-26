@@ -31,7 +31,8 @@
         },
         "files": [
             "app/Helpers/CodeGenerator.php",
-            "app/helpers.php"
+            "app/helpers.php",
+            "app/Helpers/date_format.php"
         ]
 
     },

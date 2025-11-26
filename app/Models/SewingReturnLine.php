@@ -42,7 +42,9 @@ class SewingReturnLine extends Model
             'id', // FK di sewing_pickup_line
             'id', // FK di cutting_job_bundle
             'sewing_pickup_line_id', // sewing_return_lines.sewing_pickup_line_id
-            'cutting_job_bundle_id' // sewing_pickup_lines.cutting_job_bundle_id
+            'cutting_job_bundle_id', // sewing_pickup_lines.cutting_job_bundle_id
+            'ok_qty',
+            'finished_qty',
         );
     }
 
@@ -50,5 +52,11 @@ class SewingReturnLine extends Model
     public function finishedItem()
     {
         return $this->bundle?->finishedItem();
+    }
+
+    public function sewingPickupLine()
+    {
+        // ⬅️ RELASI YANG DIBUTUHKAN BLADE
+        return $this->belongsTo(SewingPickupLine::class, 'sewing_pickup_line_id');
     }
 }

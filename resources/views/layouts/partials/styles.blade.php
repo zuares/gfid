@@ -298,4 +298,57 @@
             padding-inline: .75rem;
         }
     }
+
+    .app-footer {
+        border-top: 1px solid var(--line);
+        background: var(--card);
+        color: var(--muted);
+        font-size: .85rem;
+    }
+
+    @media (max-width: 576px) {
+        .app-footer {
+            padding-bottom: 4.5rem;
+            /* memberi ruang dari bottom-nav mobile */
+        }
+
+        /* Nonaktifkan double-tap zoom */
+        html,
+        body {
+            touch-action: manipulation;
+        }
+
+    }
+
+
+    /* Supaya perhitungan width/height konsisten di semua elemen */
+    html {
+        box-sizing: border-box;
+        -webkit-text-size-adjust: 100%;
+        /* cegah iOS auto-besarin font */
+    }
+
+    *,
+    *::before,
+    *::after {
+        box-sizing: inherit;
+    }
+
+    /* Font & ukuran dasar seragam antar device */
+    body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    /* Biar konten nggak nempel ke pinggir di hp kecil */
+    .page-wrap {
+        padding-inline: 0.75rem;
+    }
+
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
 </style>
