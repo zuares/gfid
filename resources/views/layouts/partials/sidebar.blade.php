@@ -32,9 +32,9 @@
     // Production QC (cutting / sewing nanti)
     $prodQcOpen = request()->routeIs('production.qc.*');
 
-    // Production Reports (saat ini: operator sewing + finishing per item)
+    // Production Reports (semua sewing reports + finishing per item)
     $prodReportOpen =
-        request()->routeIs('production.sewing_returns.report_operators') ||
+        request()->routeIs('production.reports.*') ||
         request()->routeIs('production.finishing_jobs.report_per_item') ||
         request()->routeIs('production.finishing_jobs.report_per_item_detail');
 @endphp
@@ -505,7 +505,7 @@
             </div>
         </li>
 
-        {{-- Laporan Produksi (yang route-nya sudah ada) --}}
+        {{-- Laporan Produksi --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $prodReportOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navProductionReports"
@@ -516,16 +516,68 @@
             </button>
 
             <div class="collapse {{ $prodReportOpen ? 'show' : '' }}" id="navProductionReports">
-                <a href="{{ route('production.sewing_returns.report_operators') }}"
-                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_returns.report_operators') ? 'active' : '' }}">
+
+                {{-- Daily Sewing Dashboard --}}
+                <a href="{{ route('production.reports.dashboard') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.dashboard') ? 'active' : '' }}">
+                    <span class="icon">📆</span>
+                    <span>Dashboard Sewing Harian</span>
+                </a>
+
+                {{-- Operator dashboard --}}
+                <a href="{{ route('production.reports.operators') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.operators') ? 'active' : '' }}">
                     <span class="icon">🧍</span>
                     <span>Performa Operator Jahit</span>
                 </a>
 
+                {{-- Outstanding WIP-SEW --}}
+                <a href="{{ route('production.reports.outstanding') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.outstanding') ? 'active' : '' }}">
+                    <span class="icon">📋</span>
+                    <span>Outstanding WIP-SEW</span>
+                </a>
+
+                {{-- Aging WIP-SEW --}}
+                <a href="{{ route('production.reports.aging_wip_sew') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.aging_wip_sew') ? 'active' : '' }}">
+                    <span class="icon">⏳</span>
+                    <span>Aging WIP-SEW</span>
+                </a>
+
+                {{-- Lead Time Sewing --}}
+                <a href="{{ route('production.reports.lead_time') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.lead_time') ? 'active' : '' }}">
+                    <span class="icon">⏱️</span>
+                    <span>Lead Time Sewing</span>
+                </a>
+
+                {{-- Productivity per operator --}}
+                <a href="{{ route('production.reports.productivity') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.productivity') ? 'active' : '' }}">
+                    <span class="icon">⚡</span>
+                    <span>Produktivitas Operator</span>
+                </a>
+
+                {{-- Partial Pickup --}}
+                <a href="{{ route('production.reports.partial_pickup') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.partial_pickup') ? 'active' : '' }}">
+                    <span class="icon">📊</span>
+                    <span>Partial Pickup</span>
+                </a>
+
+                {{-- Reject Analysis --}}
+                <a href="{{ route('production.reports.report_reject') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.report_reject') ? 'active' : '' }}">
+                    <span class="icon">⚠️</span>
+                    <span>Reject Sewing Analysis</span>
+                </a>
+
+                {{-- Finishing per Item --}}
                 <a href="{{ route('production.finishing_jobs.report_per_item') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.finishing_jobs.report_per_item') || request()->routeIs('production.finishing_jobs.report_per_item_detail') ? 'active' : '' }}">
                     <span class="icon">📦</span>
-                    <span>Finishing per Item (WIP-FIN → FG)</span>
+                    <span>Finishing per Item</span>
                 </a>
             </div>
         </li>

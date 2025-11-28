@@ -33,4 +33,5 @@ class SewingPickupLine extends Model
     {
         return $this->belongsTo(Item::class, 'finished_item_id');
     }
+
 }

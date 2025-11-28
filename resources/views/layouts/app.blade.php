@@ -43,6 +43,16 @@
     {{-- THEME + GLOBAL STYLES ASLI MU --}}
     @include('layouts.partials.styles')
 
+    {{-- ✅ Tambahan: ganjel konten di atas bottom nav khusus mobile --}}
+    <style>
+        @media (max-width: 767.98px) {
+            .app-main .page-wrap {
+                padding-bottom: 9rem;
+                /* > 62px tinggi bottom nav, jadi ada jarak */
+            }
+        }
+    </style>
+
     @stack('head')
 </head>
 
@@ -92,9 +102,6 @@
             {{-- APP FOOTER --}}
 
         </div>
-
-
-
 
         {{-- BOTTOM NAV MOBILE --}}
         @auth

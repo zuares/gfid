@@ -5,6 +5,7 @@ use App\Http\Controllers\Production\FinishingJobController;
 use App\Http\Controllers\Production\PackingJobController;
 use App\Http\Controllers\Production\QcController;
 use App\Http\Controllers\Production\SewingPickupController;
+use App\Http\Controllers\Production\SewingReportController;
 use App\Http\Controllers\Production\SewingReturnController;
 
 Route::middleware(['auth'])->group(function () {
@@ -117,14 +118,52 @@ Route::middleware(['auth'])->group(function () {
 
                     Route::delete('/{return}', [SewingReturnController::class, 'destroy'])
                         ->name('destroy');
+
+                    // ---- Sewing Reports (per operator & outstanding) ----
+
                 });
 
-            // ---- Laporan Performa Operator Jahit ----
-            Route::get('/report/operators', [SewingReturnController::class, 'operatorSummary'])
-                ->name('sewing_returns.report_operators');
+            Route::prefix('reports')
+                ->name('reports.')
+                ->group(function () {
+
+                    // Operator dashboard summary
+                    Route::get('/operators', [SewingReportController::class, 'operatorSummary'])
+                        ->name('operators');
+
+                    // Not Yet Returned / Outstanding Report
+                    Route::get('/outstanding', [SewingReportController::class, 'outstanding'])
+                        ->name('outstanding');
+
+                    // Aging WIP-SEW
+                    Route::get('/aging-wip-sew', [SewingReportController::class, 'agingWipSew'])
+                        ->name('aging_wip_sew');
+
+                    // Productivity per Operator
+                    Route::get('/productivity', [SewingReportController::class, 'productivity'])
+                        ->name('productivity');
+
+                    // Partial Pickup Report
+                    Route::get('/partial-pickup', [SewingReportController::class, 'partialPickup'])
+                        ->name('partial_pickup');
+
+                    // Reject Sewing Analysis
+                    Route::get('/reject-analysis', [SewingReportController::class, 'rejectAnalysis'])
+                        ->name('report_reject');
+
+                    // Daily Sewing Dashboard
+                    Route::get('/dashboard', [SewingReportController::class, 'dailyDashboard'])
+                        ->name('dashboard');
+
+                    // ⭐ Lead Time Sewing (Pickup → Return)
+                    Route::get('/lead-time', [SewingReportController::class, 'leadTime'])
+                        ->name('lead_time');
+
+                    Route::get('/operator-behavior', [SewingReportController::class, 'operatorBehavior'])
+                        ->name('operator_behavior');
+                });
 
         });
-
         // ==========================
         // FINISHING JOBS + REPORTS
         // ==========================

@@ -53,54 +53,62 @@ class CuttingJobController extends Controller
     }
 
     /**
-     * Form create Cutting Job (2 tahap: pilih LOT → isi output).
+     * Form Cutting Job - tahap awal:
+     * 1) User pilih LOT dulu dari gudang RM (hanya LOT yang masih ada saldo).
+     * 2) Setelah LOT dipilih (?lot_id=...), baru tampil form bundle di _form.
      */
     public function create(Request $request)
     {
-        // 1️⃣ Cari gudang RM (wajib ada)
+        // 1️⃣ Cari gudang RM (wajib ada, jadi konfigurasi awal di tabel warehouses)
         $rmWarehouseId = Warehouse::where('code', 'RM')->value('id');
 
         if (!$rmWarehouseId) {
-            // optional: bisa abort(500) atau redirect dengan flash message
+            // Bisa juga diganti redirect dengan pesan error / view khusus
             throw new \RuntimeException('Warehouse RM belum dikonfigurasi di tabel warehouses (code = RM).');
         }
 
-        // 2️⃣ Ambil semua LOT dengan saldo > 0 di gudang RM
-        //    (asumsi getAvailableLots() sudah include relasi lot & warehouse)
+        // 2️⃣ Ambil semua LOT yang masih punya saldo > 0 di gudang RM
+        //    - getAvailableLots() sudah kita buat hanya mengembalikan LOT dengan qty_balance > 0
+        //    - sudah include relasi lot.item dan warehouse
         $lotStocks = $this->inventory->getAvailableLots(
             warehouseId: $rmWarehouseId,
-            itemId: null, // bisa diisi kalau mau filter per item
+            itemId: null// kalau mau, nanti bisa ditambah filter per item kain tertentu
         );
 
-        // 3️⃣ Tentukan LOT yang dipilih:
-        //    - dari query ?lot_id=...
-        //    - atau dari old('lot_id') setelah validation error
+        // 3️⃣ Tentukan LOT yang dipilih user:
+        //    - dari query string ?lot_id=... (klik dari _pick_lot)
+        //    - atau dari old('lot_id') setelah submit gagal validasi
         $selectedLotId = $request->query('lot_id') ?: old('lot_id');
         $selectedLotRow = null;
 
         if ($selectedLotId) {
+            // Cari baris LOT yang sesuai dari Collection $lotStocks
             $selectedLotRow = $lotStocks->firstWhere('lot_id', (int) $selectedLotId);
         }
 
-        // 4️⃣ Kalau belum ada LOT terpilih atau lot_id tidak valid,
-        //    tapi stok LOT ada → auto-pilih LOT pertama supaya form tidak "kosong".
-        if (!$selectedLotRow && $lotStocks->isNotEmpty()) {
-            $selectedLotRow = $lotStocks->first();
-            $selectedLotId = $selectedLotRow->lot_id;
-        }
+        // ❌ 4️⃣ Dulu di sini ada auto-pilih LOT pertama kalau belum ada lot_id
+        //    → sekarang DIHAPUS supaya user wajib pilih LOT sendiri dari _pick_lot
+        // if (!$selectedLotRow && $lotStocks->isNotEmpty()) {
+        //     $selectedLotRow = $lotStocks->first();
+        //     $selectedLotId = $selectedLotRow->lot_id;
+        // }
 
-        // 5️⃣ Siapkan variable untuk view
+        // 5️⃣ Siapkan variable untuk dikirim ke view
+        //    Default-nya null/0, supaya kalau LOT belum dipilih, _form tidak ditampilkan.
         $lot = null;
         $warehouse = null;
         $lotBalance = 0.0;
         $rows = [];
 
         if ($selectedLotRow) {
+            // Jika user sudah memilih LOT, isi detailnya untuk _form
             $lot = $selectedLotRow->lot; // relasi Lot model
             $warehouse = $selectedLotRow->warehouse; // relasi Warehouse model
-            $lotBalance = (float) $selectedLotRow->qty_balance;
+            $lotBalance = (float) $selectedLotRow->qty_balance; // saldo kain yang masih tersedia
 
-            // Rows initial (kalau ada old input, pakai itu; kalau tidak, buat 1 baris kosong)
+            // 6️⃣ Siapkan rows bundle awal:
+            //     - kalau ada old('bundles') → pakai itu (habis validasi gagal)
+            //     - kalau tidak → buat 1 baris kosong default
             $oldBundles = old('bundles');
             if ($oldBundles) {
                 $rows = $oldBundles;
@@ -118,7 +126,65 @@ class CuttingJobController extends Controller
             }
         }
 
-        // 6️⃣ Data master item jadi & operator cutting
+        // 7️⃣ Data master item jadi (finished_good) untuk combobox di form
+        $items = Item::query()
+            ->select('id', 'code', 'item_category_id')
+            ->where('type', 'finished_good')
+            ->with(['category:id,code,name'])
+            ->orderBy('code')
+            ->get();
+
+        // 8️⃣ Data master operator cutting
+        $operators = Employee::query()
+            ->select('id', 'code', 'name')
+            ->where('role', 'cutting')
+            ->orderBy('code')
+            ->get();
+
+        // 9️⃣ Kirim ke view
+        // Di Blade:
+        // - jika $selectedLotRow == null → tampil _pick_lot (pilih LOT dulu)
+        // - jika $selectedLotRow != null → tampil _form (input bundle)
+        return view('production.cutting_jobs.create', [
+            'lotStocks' => $lotStocks,
+            'selectedLotId' => $selectedLotId,
+            'selectedLotRow' => $selectedLotRow,
+
+            // untuk _form.blade.php
+            'mode' => 'create',
+            'job' => null, // hanya dipakai di edit
+            'lot' => $lot,
+            'warehouse' => $warehouse,
+            'lotBalance' => $lotBalance,
+            'items' => $items,
+            'operators' => $operators,
+            'rows' => $rows,
+        ]);
+    }
+
+    /**
+     * Form Edit Cutting Job:
+     * - Load gudang, LOT, bundles yang sudah ada.
+     * - Isi rows untuk _form dari data bundle di DB (atau dari old() kalau validasi gagal).
+     */
+    public function edit(CuttingJob $cuttingJob)
+    {
+        // 1️⃣ Preload relasi yang dibutuhkan oleh form
+        $cuttingJob->load([
+            'warehouse',
+            'lot.item',
+            'bundles.finishedItem',
+        ]);
+
+        $lot = $cuttingJob->lot;
+        $warehouse = $cuttingJob->warehouse;
+
+        // 2️⃣ lotBalance di tampilan:
+        //    Untuk saat ini kamu jadikan "total pemakaian kain" sebagai info saja.
+        //    Nanti kalau mau, bisa diganti jadi saldo aktual LOT via InventoryService.
+        $lotBalance = $cuttingJob->bundles->sum('qty_used_fabric');
+
+        // 3️⃣ Master data item jadi dan operator cutting
         $items = Item::query()
             ->select('id', 'code', 'item_category_id')
             ->where('type', 'finished_good')
@@ -132,14 +198,47 @@ class CuttingJobController extends Controller
             ->orderBy('code')
             ->get();
 
-        return view('production.cutting_jobs.create', [
-            'lotStocks' => $lotStocks,
-            'selectedLotId' => $selectedLotId,
-            'selectedLotRow' => $selectedLotRow,
+        // 4️⃣ Siapkan rows bundle untuk _form:
+        //     - jika ada old('bundles') → pakai itu (setelah validasi gagal)
+        //     - kalau tidak, generate dari bundles yang sudah ada di DB
+        $oldBundles = old('bundles');
+        $rows = [];
 
-            // untuk _form.blade.php
-            'mode' => 'create',
-            'job' => null, // hanya dipakai di edit
+        if ($oldBundles) {
+            // Case: user submit tapi gagal validasi → jangan hilangkan isian mereka
+            $rows = $oldBundles;
+        } else {
+            // Generate rows dari bundle existing di DB
+            foreach ($cuttingJob->bundles as $b) {
+                $rows[] = [
+                    'id' => $b->id, // perlu id untuk update / delete di controller store/update
+                    'bundle_no' => $b->bundle_no,
+                    'finished_item_id' => $b->finished_item_id,
+                    'qty_pcs' => $b->qty_pcs,
+                    'qty_used_fabric' => $b->qty_used_fabric,
+                    'item_category' => '', // placeholder, nanti bisa diisi kalau ada kolom kategori spesifik per bundle
+                    'notes' => $b->notes,
+                ];
+            }
+
+            // Kalau belum ada satupun bundle, tetap sediakan 1 baris kosong supaya form tidak kosong total
+            if (empty($rows)) {
+                $rows[] = [
+                    'bundle_no' => 1,
+                    'finished_item_id' => '',
+                    'qty_pcs' => '',
+                    'qty_used_fabric' => 0,
+                    'item_category' => '',
+                    'notes' => '',
+                ];
+            }
+        }
+
+        // 5️⃣ Kirim ke view edit
+        //    Di edit.blade.php biasanya kamu cuma @include('..._form') dengan mode = edit
+        return view('production.cutting_jobs.edit', [
+            'mode' => 'edit',
+            'job' => $cuttingJob,
             'lot' => $lot,
             'warehouse' => $warehouse,
             'lotBalance' => $lotBalance,
@@ -215,79 +314,6 @@ class CuttingJobController extends Controller
         return redirect()
             ->route('production.cutting_jobs.show', $job)
             ->with('success', 'Cutting job berhasil dibuat.');
-    }
-
-    /**
-     * Form edit Cutting Job.
-     */
-    public function edit(CuttingJob $cuttingJob)
-    {
-        $cuttingJob->load([
-            'warehouse',
-            'lot.item',
-            'bundles.finishedItem',
-        ]);
-
-        $lot = $cuttingJob->lot;
-        $warehouse = $cuttingJob->warehouse;
-
-        // untuk sekarang, jadikan total pemakaian kain sebagai "lotBalance" tampilan
-        $lotBalance = $cuttingJob->bundles->sum('qty_used_fabric');
-
-        $items = Item::query()
-            ->select('id', 'code', 'item_category_id')
-            ->where('type', 'finished_good')
-            ->with(['category:id,code,name'])
-            ->orderBy('code')
-            ->get();
-
-        $operators = Employee::query()
-            ->select('id', 'code', 'name')
-            ->where('role', 'cutting')
-            ->orderBy('code')
-            ->get();
-
-        // siapkan rows untuk _form: dari old() atau dari DB
-        $oldBundles = old('bundles');
-        $rows = [];
-
-        if ($oldBundles) {
-            $rows = $oldBundles;
-        } else {
-            foreach ($cuttingJob->bundles as $b) {
-                $rows[] = [
-                    'id' => $b->id,
-                    'bundle_no' => $b->bundle_no,
-                    'finished_item_id' => $b->finished_item_id,
-                    'qty_pcs' => $b->qty_pcs,
-                    'qty_used_fabric' => $b->qty_used_fabric,
-                    'item_category' => '', // kalau suatu saat ada kolom / relasi kategori di bundle, bisa diisi
-                    'notes' => $b->notes,
-                ];
-            }
-
-            if (empty($rows)) {
-                $rows[] = [
-                    'bundle_no' => 1,
-                    'finished_item_id' => '',
-                    'qty_pcs' => '',
-                    'qty_used_fabric' => 0,
-                    'item_category' => '',
-                    'notes' => '',
-                ];
-            }
-        }
-
-        return view('production.cutting_jobs.edit', [
-            'mode' => 'edit',
-            'job' => $cuttingJob,
-            'lot' => $lot,
-            'warehouse' => $warehouse,
-            'lotBalance' => $lotBalance,
-            'items' => $items,
-            'operators' => $operators,
-            'rows' => $rows,
-        ]);
     }
 
     /**

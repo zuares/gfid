@@ -291,31 +291,61 @@ class InventoryService
             lotId: $lotId,
         );
     }
-
+/**
+ * Ambil daftar LOT yang masih memiliki saldo (qty_balance > 0),
+ * bisa difilter per gudang dan per item.
+ *
+ * Return: Collection berisi baris (per lot_id + warehouse_id + item_id)
+ *         dengan tambahan relasi lot, item, warehouse.
+ */
     public function getAvailableLots(
-        ?int $warehouseId = null,
-        ?int $itemId = null,
+        ?int $warehouseId = null, // filter opsional: pilih gudang tertentu
+        ?int $itemId = null, // filter opsional: pilih item tertentu
     ): Collection {
+
+        // 1️⃣ Mulai query dari inventory_mutations
+        //    Kita hitung total qty_change per group (lot, warehouse, item).
         $q = InventoryMutation::query()
             ->selectRaw('
-                lot_id,
-                warehouse_id,
-                item_id,
-                SUM(qty_change) as qty_balance
-            ')
+            lot_id,
+            warehouse_id,
+            item_id,
+            SUM(qty_change) as qty_balance
+        ')
+        // 2️⃣ Pastikan ini benar-benar data LOT
             ->whereNotNull('lot_id')
-            ->groupBy('lot_id', 'warehouse_id', 'item_id')
-            ->having('qty_balance', '>', 0)
-            ->with(['lot.item', 'warehouse']); // pastikan relasi ini ada di model
 
+        // 3️⃣ Group untuk hitung saldo per:
+        //    - lot_id (LOT siapa)
+        //    - warehouse_id (lokasi mana)
+        //    - item_id (jenis kain apa)
+            ->groupBy('lot_id', 'warehouse_id', 'item_id')
+
+        // 4️⃣ Hanya LOT yang MASIH ada sisa
+        //    qty_balance = total (qty_in - qty_out)
+            ->having('qty_balance', '>', 0)
+
+        // 5️⃣ Preload relasi supaya Blade tidak N+1 query
+            ->with([
+                'lot.item', // akses: $row->lot->item->name
+                'warehouse', // akses: $row->warehouse->name
+            ])
+
+        // 6️⃣ Urutkan biar rapi saat ditampilkan di dropdown / tabel
+            ->orderBy('lot_id')
+            ->orderBy('warehouse_id');
+
+        // 7️⃣ Filter opsional jika user pilih gudang tertentu
         if ($warehouseId) {
             $q->where('warehouse_id', $warehouseId);
         }
 
+        // 8️⃣ Filter opsional jika user ingin LOT untuk item tertentu
         if ($itemId) {
             $q->where('item_id', $itemId);
         }
 
+        // 9️⃣ Kembalikan hasil akhir
         return $q->get();
     }
 

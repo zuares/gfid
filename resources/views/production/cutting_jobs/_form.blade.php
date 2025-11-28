@@ -39,6 +39,7 @@
             {{ number_format($lotQty, 2, ',', '.') }} Kg
         </span>
     </div>
+
     {{-- hidden --}}
     <input type="hidden" name="warehouse_id" value="{{ $warehouse?->id }}">
     <input type="hidden" name="lot_id" value="{{ $lot?->id }}">
@@ -57,7 +58,6 @@
         @error('fabric_item_id')
             <div class="text-danger small mt-1">{{ $message }}</div>
         @enderror
-
 
         {{-- HEADER: Tgl Beli, Nama Bahan, Qty --}}
         <div class="row g-3 mb-2">
@@ -171,27 +171,19 @@
             ⚠️ Total pemakaian kain > saldo LOT
         </div>
 
-        {{-- TABLE (desktop) + data-label (mobile) --}}
         <div class="table-wrap">
             <table class="table table-sm align-middle mono">
                 <thead>
                     <tr>
                         <th style="width:40px;">#</th>
-                        <th style="width:180px;">Item Jadi</th>
+                        <th>Item Jadi</th>
                         <th style="width:110px;">Qty (pcs)</th>
-
-                        {{-- Item Category: hanya tampil di md+ --}}
                         <th class="d-none d-md-table-cell">Item Category</th>
-
-                        {{-- Used: hanya tampil di md+ --}}
                         <th style="width:120px;" class="d-none d-md-table-cell">Used</th>
-
-                        {{-- tombol hapus: hanya tampil di md+ --}}
                         <th style="width:40px;" class="d-none d-md-table-cell"></th>
                     </tr>
                 </thead>
                 <tbody id="bundle-rows">
-
                     @foreach ($rows as $i => $row)
                         <tr>
                             {{-- bundle_id (untuk edit) --}}
@@ -205,37 +197,29 @@
                                 <span class="row-index mono"></span>
                             </td>
 
-                            {{-- Item Jadi --}}
+                            {{-- Item Jadi -> INPUT TEXT --}}
+                            {{-- Item Jadi -> pakai auto suggest --}}
                             <td data-label="Item Jadi">
-                                <select name="bundles[{{ $i }}][finished_item_id]"
-                                    class="form-select form-select-sm bundle-item-select">
-                                    <option value="">Pilih...</option>
-                                    @foreach ($items as $fg)
-                                        <option value="{{ $fg->id }}"
-                                            data-category-name="{{ $fg->category->name ?? '' }}"
-                                            data-category-code="{{ $fg->category->code ?? '' }}"
-                                            @selected(($row['finished_item_id'] ?? null) == $fg->id)>
-                                            {{ $fg->code }}
-                                        </option>
-                                    @endforeach
-                                </select>
+                                <x-item-suggest-input :items="$items" code-name="bundles[0][finished_item_code]"
+                                    id-name="bundles[0][finished_item_id]" />
+
                             </td>
+
+
 
                             {{-- Qty (pcs) --}}
                             <td data-label="Qty (pcs)">
-                                <input type="number" step="1" min="0" inputmode="numeric"
-                                    pattern="\d*" name="bundles[{{ $i }}][qty_pcs]"
+                                <input type="number" step="1" min="0" inputmode="numeric" pattern="\d*"
+                                    name="bundles[{{ $i }}][qty_pcs]"
                                     class="form-control form-control-sm text-end bundle-qty"
                                     value="{{ isset($row['qty_pcs']) ? (int) $row['qty_pcs'] : '' }}">
                             </td>
 
-                            {{-- Item Category (auto) - sembunyi di mobile --}}
+                            {{-- Item Category (manual) - sembunyi di mobile --}}
                             <td data-label="Item Category" class="d-none d-md-table-cell">
-                                <span class="bundle-cat-display help">
-                                    {{ $row['item_category'] ?? '-' }}
-                                </span>
-                                <input type="hidden" name="bundles[{{ $i }}][item_category]"
-                                    class="bundle-cat-input" value="{{ $row['item_category'] ?? '' }}">
+                                <input type="text" name="bundles[{{ $i }}][item_category]"
+                                    class="form-control form-control-sm" placeholder="Kategori"
+                                    value="{{ $row['item_category'] ?? '' }}">
                             </td>
 
                             {{-- Used (hanya tampil di desktop) --}}
@@ -266,7 +250,7 @@
         @enderror
     </div>
 
-    {{-- TOMBOL --}}
+    {{-- TOMBOL SUBMIT --}}
     <div class="d-flex justify-content-end mb-4">
         <button class="btn btn-primary">
             {{ $isEdit ? 'Update Cutting Job' : 'Simpan Cutting Job' }}
@@ -294,8 +278,6 @@
         }
 
         @media (max-width: 767.98px) {
-
-            /* Biar header Output Bundles dan tombol rapi di mobile */
             .card .d-flex.flex-column.flex-md-row {
                 gap: .5rem;
             }
@@ -352,8 +334,6 @@
 
                 let v = parseInt(qtyInput.value || '0', 10);
                 if (isNaN(v) || v < 0) v = 0;
-
-                // normalisasi kembali ke input (kalau user ketik 1.5 jadi 1)
                 qtyInput.value = v;
 
                 totalQtyPcs += v;
@@ -363,9 +343,9 @@
             const totalUsed = perRow * count;
 
             if (rowCountSpan) rowCountSpan.textContent = count;
-            if (perRowSpan) perRowSpan.textContent = perRow?.toFixed ? perRow.toFixed(2).replace('.', ',') : '';
+            if (perRowSpan) perRowSpan.textContent = perRow ? perRow.toFixed(2).replace('.', ',') : '';
             if (totalQtySpan) totalQtySpan.textContent = totalQtyPcs.toFixed(2).replace('.', ',');
-            if (totalUsedSpan) totalUsedSpan.textContent = totalUsed?.toFixed ? totalUsed.toFixed(2).replace('.', ',') : '';
+            if (totalUsedSpan) totalUsedSpan.textContent = totalUsed ? totalUsed.toFixed(2).replace('.', ',') : '';
 
             if (warningEl) {
                 warningEl.style.display = (totalUsed > lotQty + 0.000001) ? 'block' : 'none';
@@ -379,44 +359,13 @@
             });
         }
 
-        function recalcRowCategory(tr) {
-            const select = tr.querySelector('.bundle-item-select');
-            const catSpan = tr.querySelector('.bundle-cat-display');
-            const catInput = tr.querySelector('.bundle-cat-input');
-
-            if (!select || !select.value) {
-                if (catSpan) catSpan.textContent = '-';
-                if (catInput) catInput.value = '';
-                return;
-            }
-
-            const opt = select.selectedOptions[0];
-            const catName = opt.getAttribute('data-category-name') ||
-                opt.getAttribute('data-category-code') ||
-                '-';
-
-            if (catSpan) catSpan.textContent = catName || '-';
-            if (catInput) catInput.value = catName || '';
-        }
-
         function attachRowListeners(tr) {
-            const select = tr.querySelector('.bundle-item-select');
             const qtyInput = tr.querySelector('.bundle-qty');
-
-            if (select) {
-                select.addEventListener('change', function() {
-                    recalcRowCategory(tr);
-                });
-            }
 
             if (qtyInput) {
                 attachSelectAllOnFocus(qtyInput);
-                qtyInput.addEventListener('input', function() {
-                    recalcAll();
-                });
+                qtyInput.addEventListener('input', recalcAll);
             }
-
-            recalcRowCategory(tr);
         }
 
         function addRow() {
@@ -430,17 +379,17 @@
         <span class="row-index mono"></span>
     </td>
     <td data-label="Item Jadi">
-        <select name="bundles[${index}][finished_item_id]"
-                class="form-select form-select-sm bundle-item-select">
-            <option value="">Pilih...</option>
-            @foreach ($items as $fg)
-                <option value="{{ $fg->id }}"
-                        data-category-name="{{ $fg->category->name ?? '' }}"
-                        data-category-code="{{ $fg->category->code ?? '' }}">
-                    {{ $fg->code }}
-                </option>
-            @endforeach
-        </select>
+        <div class="item-suggest-wrap position-relative">
+            <input type="text"
+                   name="bundles[${index}][finished_item_code]"
+                   class="form-control form-control-sm js-item-suggest-input"
+                   placeholder="Kode / nama item"
+                   autocomplete="off">
+            <input type="hidden"
+                   name="bundles[${index}][finished_item_id]"
+                   class="js-item-suggest-id">
+            <div class="item-suggest-dropdown shadow-sm" style="display:none;"></div>
+        </div>
     </td>
     <td data-label="Qty (pcs)">
         <input type="number"
@@ -452,11 +401,10 @@
                class="form-control form-control-sm text-end bundle-qty">
     </td>
     <td data-label="Item Category" class="d-none d-md-table-cell">
-        <span class="bundle-cat-display help">-</span>
-        <input type="hidden"
+        <input type="text"
                name="bundles[${index}][item_category]"
-               class="bundle-cat-input"
-               value="">
+               class="form-control form-control-sm"
+               placeholder="Kategori">
     </td>
     <td data-label="Used" class="d-none d-md-table-cell">
         <span class="bundle-qty-used help">-</span>
