@@ -83,17 +83,14 @@ class PackingJobController extends Controller
             ->where('code', 'FG')
             ->first();
 
-        // Default: collection kosong
         $stocks = collect();
 
-        // Kalau gudang FG ketemu, baru ambil stok + paginate
         if ($fgWarehouse) {
             $query = InventoryStock::query()
                 ->with('item')
                 ->where('warehouse_id', $fgWarehouse->id)
                 ->where('qty', '>', 0.0001);
 
-            // Filter pencarian (kode / nama / warna)
             if ($q = $request->input('q')) {
                 $q = trim($q);
                 $query->whereHas('item', function ($sub) use ($q) {
@@ -158,7 +155,7 @@ class PackingJobController extends Controller
                     'item_id' => $stock->item_id,
                     'item_label' => $label,
                     'fg_balance' => $fgBalance,
-                    'qty_packed' => $fgBalance, // default: pack semua, nanti user boleh ubah
+                    'qty_packed' => $fgBalance, // default: pack semua, boleh diubah user
                     'notes' => null,
                 ];
             }
@@ -176,7 +173,7 @@ class PackingJobController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        // 1. Validasi dasar (qty_fg tidak perlu divalidasi, kita hitung di server)
+        // 1. Validasi dasar
         $validated = $request->validate([
             'date' => ['required', 'date'],
             'channel' => ['nullable', 'string', 'max:50'],
@@ -189,13 +186,22 @@ class PackingJobController extends Controller
             'lines.*.notes' => ['nullable', 'string'],
         ]);
 
-        // 2. Pastikan warehouse FG ada
-        $fgWarehouseId = Warehouse::where('code', 'FG')->value('id');
-        if (!$fgWarehouseId) {
+        // 2. Pastikan warehouse FG & PACKED ada
+        $warehouses = Warehouse::query()
+            ->whereIn('code', ['FG', 'PACKED'])
+            ->get()
+            ->keyBy('code');
+
+        if (!isset($warehouses['FG'], $warehouses['PACKED'])) {
             return back()
                 ->withInput()
-                ->withErrors(['warehouse' => 'Warehouse FG belum dikonfigurasi.']);
+                ->withErrors([
+                    'warehouse' => 'Warehouse FG dan PACKED belum dikonfigurasi.',
+                ]);
         }
+
+        $fgWarehouseId = $warehouses['FG']->id;
+        $packedWarehouseId = $warehouses['PACKED']->id;
 
         $normalizedLines = [];
 
@@ -204,12 +210,10 @@ class PackingJobController extends Controller
             $itemId = (int) $lineData['item_id'];
             $qtyPacked = (float) $lineData['qty_packed'];
 
-            // clamp minimal 0
             if ($qtyPacked < 0) {
                 $qtyPacked = 0;
             }
 
-            // baris dengan qty 0 di-skip (tidak disimpan)
             if ($qtyPacked <= 0) {
                 continue;
             }
@@ -238,16 +242,14 @@ class PackingJobController extends Controller
                     ]);
             }
 
-            // Simpan versi "bersih" untuk nanti di-insert
             $normalizedLines[] = [
                 'item_id' => $itemId,
-                'qty_fg' => $fgBalance, // saldo FG saat ini (bukan qty_packed)
+                'qty_fg' => $fgBalance,
                 'qty_packed' => $qtyPacked,
                 'notes' => $lineData['notes'] ?? null,
             ];
         }
 
-        // 4. Kalau setelah dinormalisasi tidak ada baris valid
         if (empty($normalizedLines)) {
             return back()
                 ->withInput()
@@ -256,8 +258,8 @@ class PackingJobController extends Controller
                 ]);
         }
 
-        // 5. Simpan header + detail dalam transaksi
-        $job = DB::transaction(function () use ($validated, $normalizedLines, $request) {
+        // 4. Simpan header + detail dalam transaksi
+        $job = DB::transaction(function () use ($validated, $normalizedLines, $request, $fgWarehouseId, $packedWarehouseId) {
             $code = CodeGenerator::generate('PCK');
 
             /** @var \App\Models\PackingJob $job */
@@ -268,6 +270,8 @@ class PackingJobController extends Controller
                 'channel' => $validated['channel'] ?? null,
                 'reference' => $validated['reference'] ?? null,
                 'notes' => $validated['notes'] ?? null,
+                'warehouse_from_id' => $fgWarehouseId,
+                'warehouse_to_id' => $packedWarehouseId,
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
@@ -276,9 +280,9 @@ class PackingJobController extends Controller
                 PackingJobLine::create([
                     'packing_job_id' => $job->id,
                     'item_id' => $line['item_id'],
-                    'qty_fg' => $line['qty_fg'], // catat saldo FG
+                    'qty_fg' => $line['qty_fg'],
                     'qty_packed' => $line['qty_packed'],
-                    'packed_at' => $validated['date'],
+                    'packed_at' => $validated['date'], // kalau kamu punya kolom ini
                     'notes' => $line['notes'],
                 ]);
             }
@@ -299,6 +303,8 @@ class PackingJobController extends Controller
         $packing_job->load([
             'lines.item',
             'createdBy',
+            'warehouseFrom',
+            'warehouseTo',
         ]);
 
         return view('production.packing_jobs.show', [
@@ -323,8 +329,7 @@ class PackingJobController extends Controller
         ? $job->date->format('Y-m-d')
         : Carbon::parse($job->date)->format('Y-m-d');
 
-        // Ambil stok FG untuk dropdown
-        $fgWarehouseId = Warehouse::where('code', 'FG')->value('id');
+        $fgWarehouseId = $job->warehouse_from_id ?: Warehouse::where('code', 'FG')->value('id');
 
         $stocks = InventoryStock::query()
             ->with('item')
@@ -335,7 +340,6 @@ class PackingJobController extends Controller
             ->orderBy('item_id')
             ->get();
 
-        // Lines untuk form (struktur mirip create)
         $lines = $job->lines->map(function (PackingJobLine $line) {
             $item = $line->item;
             $label = $item
@@ -345,7 +349,7 @@ class PackingJobController extends Controller
             return [
                 'item_id' => $item?->id,
                 'item_label' => $label,
-                'fg_balance' => $line->qty_fg, // fallback
+                'fg_balance' => $line->qty_fg,
                 'qty_fg' => $line->qty_fg,
                 'qty_packed' => $line->qty_packed,
                 'notes' => $line->notes,
@@ -367,12 +371,10 @@ class PackingJobController extends Controller
     {
         $job = $packing_job;
 
-        // Hanya draft yang boleh diedit
         if ($job->status !== 'draft') {
             abort(400, 'Hanya Packing Job dengan status draft yang dapat diedit.');
         }
 
-        // 1. Validasi dasar
         $validated = $request->validate([
             'date' => ['required', 'date'],
             'channel' => ['nullable', 'string', 'max:50'],
@@ -385,8 +387,7 @@ class PackingJobController extends Controller
             'lines.*.notes' => ['nullable', 'string'],
         ]);
 
-        // 2. Pastikan warehouse FG ada
-        $fgWarehouseId = Warehouse::where('code', 'FG')->value('id');
+        $fgWarehouseId = $job->warehouse_from_id ?: Warehouse::where('code', 'FG')->value('id');
         if (!$fgWarehouseId) {
             return back()
                 ->withInput()
@@ -395,22 +396,18 @@ class PackingJobController extends Controller
 
         $normalizedLines = [];
 
-        // 3. Normalisasi dan validasi per baris (server-side)
         foreach ($validated['lines'] as $index => $lineData) {
             $itemId = (int) $lineData['item_id'];
             $qtyPacked = (float) $lineData['qty_packed'];
 
-            // Clamp minimal 0
             if ($qtyPacked < 0) {
                 $qtyPacked = 0;
             }
 
-            // Baris dengan qty 0 di-skip (tidak disimpan)
             if ($qtyPacked <= 0) {
                 continue;
             }
 
-            // Ambil saldo FG terkini dari stock
             $fgBalance = (float) (
                 InventoryStock::query()
                     ->where('warehouse_id', $fgWarehouseId)
@@ -418,7 +415,6 @@ class PackingJobController extends Controller
                     ->value('qty') ?? 0
             );
 
-            // Kalau melebihi saldo → error
             if ($qtyPacked > $fgBalance + 0.0001) {
                 $item = Item::find($itemId);
 
@@ -435,16 +431,14 @@ class PackingJobController extends Controller
                     ]);
             }
 
-            // Simpan versi "bersih" untuk insert
             $normalizedLines[] = [
                 'item_id' => $itemId,
-                'qty_fg' => $fgBalance, // saldo FG saat ini (bukan qty_packed)
+                'qty_fg' => $fgBalance,
                 'qty_packed' => $qtyPacked,
                 'notes' => $lineData['notes'] ?? null,
             ];
         }
 
-        // Kalau setelah dinormalisasi ternyata tidak ada satupun baris valid
         if (empty($normalizedLines)) {
             return back()
                 ->withInput()
@@ -453,9 +447,7 @@ class PackingJobController extends Controller
                 ]);
         }
 
-        // 4. Simpan dalam transaksi
         DB::transaction(function () use ($job, $validated, $normalizedLines, $request) {
-            // Update header
             $job->update([
                 'date' => $validated['date'],
                 'channel' => $validated['channel'] ?? null,
@@ -464,7 +456,6 @@ class PackingJobController extends Controller
                 'updated_by' => $request->user()->id,
             ]);
 
-            // Hapus detail lama, insert ulang (karena masih draft aman)
             $job->lines()->delete();
 
             foreach ($normalizedLines as $line) {
@@ -491,30 +482,22 @@ class PackingJobController extends Controller
     {
         $job = $packing_job;
 
-        // Hanya boleh posting kalau masih draft
         if ($job->status === 'posted') {
             return redirect()
                 ->route('production.packing_jobs.show', $job->id)
                 ->with('status', 'Packing Job ini sudah diposting sebelumnya.');
         }
 
-        // Pastikan warehouse FG & PACKED ada
-        $warehouses = Warehouse::query()
-            ->whereIn('code', ['FG', 'PACKED'])
-            ->get()
-            ->keyBy('code');
+        // Pakai header, bukan hard-code
+        $fgWarehouseId = $job->warehouse_from_id;
+        $packedWarehouseId = $job->warehouse_to_id;
 
-        if (!isset($warehouses['FG'], $warehouses['PACKED'])) {
+        if (!$fgWarehouseId || !$packedWarehouseId) {
             return back()->withErrors([
-                'warehouse' => 'Warehouse FG dan PACKED belum dikonfigurasi lengkap. '
-                . 'Silakan setting dulu di Master Gudang.',
+                'warehouse' => 'warehouse_from_id atau warehouse_to_id belum terisi pada Packing Job ini.',
             ]);
         }
 
-        $fgWarehouseId = $warehouses['FG']->id;
-        $packedWarehouseId = $warehouses['PACKED']->id;
-
-        // Tanggal mutasi stok = tanggal job
         $date = $job->date instanceof \DateTimeInterface
         ? $job->date
         : Carbon::parse($job->date);
@@ -523,7 +506,6 @@ class PackingJobController extends Controller
 
         try {
             DB::transaction(function () use ($job, $inventory, $fgWarehouseId, $packedWarehouseId, $date) {
-                // pastikan relasi lines sudah kebuka
                 $job->load('lines');
 
                 foreach ($job->lines as $line) {
@@ -533,30 +515,40 @@ class PackingJobController extends Controller
                         continue;
                     }
 
-                    // 1) STOCK OUT dari FG
-                    $inventory->stockOut(
-                        $fgWarehouseId,
-                        $line->item_id,
-                        $qty,
-                        $date,
-                        PackingJob::class,
-                        $job->id,
-                        'Packing ' . $job->code
+                    // Ambil unit cost di FG agar HPP ikut pindah ke PACKED
+                    $unitCostFg = $inventory->getItemIncomingUnitCost(
+                        warehouseId: $fgWarehouseId,
+                        itemId: $line->item_id,
                     );
 
-                    // 2) STOCK IN ke PACKED
+                    // 1) STOCK OUT dari FG
+                    $inventory->stockOut(
+                        warehouseId: $fgWarehouseId,
+                        itemId: $line->item_id,
+                        qty: $qty,
+                        date: $date,
+                        sourceType: PackingJob::class,
+                        sourceId: $job->id,
+                        notes: 'Packing ' . $job->code . ' (OUT FG)',
+                        allowNegative: false,
+                        lotId: null,
+                        unitCost: $unitCostFg, // kalau stockOut kamu ignore unitCost, ini ga ngaruh
+                    );
+
+                    // 2) STOCK IN ke PACKED dengan unit cost FG
                     $inventory->stockIn(
-                        $packedWarehouseId,
-                        $line->item_id,
-                        $qty,
-                        $date,
-                        PackingJob::class,
-                        $job->id,
-                        'Packing ' . $job->code
+                        warehouseId: $packedWarehouseId,
+                        itemId: $line->item_id,
+                        qty: $qty,
+                        date: $date,
+                        sourceType: PackingJob::class,
+                        sourceId: $job->id,
+                        notes: 'Packing ' . $job->code . ' (IN PACKED)',
+                        lotId: null,
+                        unitCost: $unitCostFg,
                     );
                 }
 
-                // Update status job jadi posted
                 $job->update([
                     'status' => 'posted',
                     'posted_at' => now(),
@@ -587,20 +579,13 @@ class PackingJobController extends Controller
             return back()->with('status', 'Packing Job belum diposting, tidak bisa di-unpost.');
         }
 
-        // Pastikan warehouse FG & PACKED ada
-        $warehouses = Warehouse::query()
-            ->whereIn('code', ['FG', 'PACKED'])
-            ->get()
-            ->keyBy('code');
+        $fgWarehouseId = $job->warehouse_from_id;
+        $packedWarehouseId = $job->warehouse_to_id;
 
-        if (!isset($warehouses['FG'], $warehouses['PACKED'])) {
-            return back()->with('status', 'Warehouse FG dan PACKED belum dikonfigurasi lengkap.');
+        if (!$fgWarehouseId || !$packedWarehouseId) {
+            return back()->with('status', 'warehouse_from_id atau warehouse_to_id belum terisi.');
         }
 
-        $fgWarehouseId = $warehouses['FG']->id;
-        $packedWarehouseId = $warehouses['PACKED']->id;
-
-        // Tanggal mutasi stok = tanggal job
         $date = $job->date instanceof \DateTimeInterface
         ? $job->date
         : Carbon::parse($job->date);
@@ -618,41 +603,44 @@ class PackingJobController extends Controller
                         continue;
                     }
 
-                    // Saat POST:
-                    // 1) OUT FG qty_packed
-                    // 2) IN PACKED qty_packed
-                    //
-                    // Saat UNPOST → dibalik:
-                    // 1) OUT PACKED qty_packed
-                    // 2) IN FG qty_packed
-
-                    // 1. STOCK OUT dari PACKED
-                    $inventory->stockOut(
-                        $packedWarehouseId,
-                        $line->item_id,
-                        $qty,
-                        $date,
-                        PackingJob::class,
-                        $job->id,
-                        'Unpost Packing ' . $job->code
+                    // Ambil unit cost di PACKED, supaya nilai kembali ke FG
+                    $unitCostPacked = $inventory->getItemIncomingUnitCost(
+                        warehouseId: $packedWarehouseId,
+                        itemId: $line->item_id,
                     );
 
-                    // 2. STOCK IN kembali ke FG
+                    // 1) STOCK OUT dari PACKED
+                    $inventory->stockOut(
+                        warehouseId: $packedWarehouseId,
+                        itemId: $line->item_id,
+                        qty: $qty,
+                        date: $date,
+                        sourceType: PackingJob::class,
+                        sourceId: $job->id,
+                        notes: 'Unpost Packing ' . $job->code . ' (OUT PACKED)',
+                        allowNegative: false,
+                        lotId: null,
+                        unitCost: $unitCostPacked,
+                    );
+
+                    // 2) STOCK IN kembali ke FG
                     $inventory->stockIn(
-                        $fgWarehouseId,
-                        $line->item_id,
-                        $qty,
-                        $date,
-                        PackingJob::class,
-                        $job->id,
-                        'Unpost Packing ' . $job->code
+                        warehouseId: $fgWarehouseId,
+                        itemId: $line->item_id,
+                        qty: $qty,
+                        date: $date,
+                        sourceType: PackingJob::class,
+                        sourceId: $job->id,
+                        notes: 'Unpost Packing ' . $job->code . ' (IN FG)',
+                        lotId: null,
+                        unitCost: $unitCostPacked,
                     );
                 }
 
-                // Kembalikan status job ke draft
                 $job->update([
                     'status' => 'draft',
                     'posted_at' => null,
+                    'unposted_at' => now(),
                     'updated_by' => Auth::id(),
                 ]);
             });
@@ -666,5 +654,4 @@ class PackingJobController extends Controller
             ->route('production.packing_jobs.show', $job->id)
             ->with('status', 'Packing Job berhasil di-unpost dan stok dikembalikan FG dari PACKED.');
     }
-
 }

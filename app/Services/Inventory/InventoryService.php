@@ -457,4 +457,14 @@ class InventoryService
         return (float) $mutation->unit_cost;
     }
 
+    public function getOnHandQty(int $warehouseId, int $itemId): float
+    {
+        /** @var InventoryStock|null $stock */
+        $stock = InventoryStock::where('warehouse_id', $warehouseId)
+            ->where('item_id', $itemId)
+            ->first();
+
+        return $this->num($stock?->qty ?? 0);
+    }
+
 }

@@ -174,18 +174,36 @@ class SewingPickupController extends Controller
                 }
 
                 // ========= LOGIKA “STOK BUNDLE TERSISA” =========
-                // Ambil qty yang sudah pernah dipick ke sewing
-                $alreadyPicked = (float) ($bundle->sewing_picked_qty ?? 0);
 
-                // Sisa qty yang masih boleh di-pick
-                $remaining = max($maxQtyOk - $alreadyPicked, 0);
+// 1️⃣ Hitung total yang sudah pernah dipick dari bundle ini
+                $alreadyPicked = (float) SewingPickupLine::query()
+                    ->where('cutting_job_bundle_id', $bundle->id)
+                // kalau mau hanya hitung pickup yg masih aktif / posted:
+                // ->whereHas('pickup', fn ($q) => $q->whereIn('status', ['draft', 'posted']))
+                    ->sum('qty_bundle');
+
+// 2️⃣ Sisa qty berbasis QC (atau qty_pcs)
+                $remainingByQc = max($maxQtyOk - $alreadyPicked, 0);
+
+// Tambahan safety: kalau karena suatu alasan QC/qty_pcs kacau,
+// tapi stok fisik di WIP-CUT masih ada, jangan langsung nol.
+// Kita clamp ke stok WIP-CUT.
+                $wipCutOnHand = $this->inventory->getOnHandQty(
+                    warehouseId: $wipCutWarehouseId,
+                    itemId: $bundle->finished_item_id,
+                );
+
+                $remaining = min(
+                    $remainingByQc > 0 ? $remainingByQc : $wipCutOnHand,
+                    $wipCutOnHand
+                );
 
                 if ($remaining <= 0) {
-                    // bundle ini sudah habis dipick sebelumnya
+                    // bundle ini sudah habis secara logis
                     continue;
                 }
 
-                // Batasi qty request ke sisa yang masih ada
+// Batasi qty request ke sisa yang masih ada
                 if ($qty > $remaining) {
                     $qty = $remaining;
                 }

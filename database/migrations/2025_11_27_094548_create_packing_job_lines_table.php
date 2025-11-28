@@ -12,28 +12,21 @@ return new class extends Migration
             $table->id();
 
             $table->foreignId('packing_job_id')
-                ->constrained()
-                ->cascadeOnUpdate()
-                ->cascadeOnDelete();
+                ->constrained('packing_jobs')
+                ->onDelete('cascade');
 
             $table->foreignId('item_id')
-                ->constrained('items')
-                ->cascadeOnUpdate()
-                ->restrictOnDelete();
+                ->constrained('items');
 
-            // qty yang diambil dari FG (biasanya = qty_packed)
-            $table->decimal('qty_fg', 12, 2);
+            // Snapshot qty FG (opsional, lebih ke info)
+            $table->decimal('qty_fg', 15, 2)->default(0);
 
-            // qty yang benar-benar dipacking ke gudang PACKED
-            $table->decimal('qty_packed', 12, 2);
-
-            $table->timestamp('packed_at')->nullable();
+            // Qty yang benar-benar dipacking
+            $table->decimal('qty_packed', 15, 2);
 
             $table->text('notes')->nullable();
 
             $table->timestamps();
-
-            $table->index(['item_id']);
         });
     }
 

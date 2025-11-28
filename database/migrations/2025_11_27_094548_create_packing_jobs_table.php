@@ -11,20 +11,33 @@ return new class extends Migration
         Schema::create('packing_jobs', function (Blueprint $table) {
             $table->id();
 
-            $table->string('code')->unique(); // PCK-YYYYMMDD-###
+            // Kode dokumen: PCK-YYYYMMDD-###
+            $table->string('code')->unique();
 
+            // Tanggal dokumen
             $table->date('date');
 
+            // Status workflow
             $table->string('status')->default('draft'); // draft / posted
             $table->timestamp('posted_at')->nullable();
             $table->timestamp('unposted_at')->nullable();
 
-            // Optional info: channel penjualan & referensi
-            $table->string('channel')->nullable(); // SHOPEE / TOKO / WEBSITE, dll
+            // Info penjualan (opsional)
+            $table->string('channel')->nullable(); // SHOPEE / TOKO / WEBSITE / dll
             $table->string('reference')->nullable(); // SO-xxx / DO-xxx / dsb
 
+            // Catatan umum
             $table->text('notes')->nullable();
 
+            // GUDANG ASAL & TUJUAN
+            // Misal: FROM = FG, TO = PCK
+            $table->foreignId('warehouse_from_id')
+                ->constrained('warehouses');
+
+            $table->foreignId('warehouse_to_id')
+                ->constrained('warehouses');
+
+            // Audit user
             $table->foreignId('created_by')
                 ->nullable()
                 ->constrained('users')
