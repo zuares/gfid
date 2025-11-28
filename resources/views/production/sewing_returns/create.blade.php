@@ -314,7 +314,7 @@
         $selectedPickupId = old('pickup_id', $pickupId ?? null);
         $defaultDate = old('date', optional($selectedPickup?->date)->format('Y-m-d') ?? now()->format('Y-m-d'));
 
-        $itemCodes = $lines
+        $itemCodes = ($lines ?? collect())
             ->map(function ($l) {
                 return optional(optional($l->bundle)->finishedItem)->code;
             })
@@ -405,7 +405,8 @@
                         @error('pickup_id')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
-                        {{-- 🔥 operator_id langsung ikut SewingPickup --}}
+
+                        {{-- Operator diambil dari SewingPickup --}}
                         @if ($selectedPickup)
                             <input type="hidden" name="operator_id" value="{{ $selectedPickup->operator_id }}">
                         @endif
@@ -415,11 +416,11 @@
                             </div>
                         @endif
 
-                        {{-- FILTER KODE ITEM: MOBILE (di bawah sewing pickup) --}}
+                        {{-- FILTER KODE ITEM: MOBILE --}}
                         @if ($itemCodes->isNotEmpty())
                             <div class="mt-3 d-md-none">
                                 <div class="help mb-1">Filter Kode Item (opsional)</div>
-                                <select id="filter-item-code" class="form-select form-select-sm">
+                                <select class="form-select form-select-sm filter-item-code">
                                     <option value="">Semua item...</option>
                                     @foreach ($itemCodes as $code)
                                         <option value="{{ $code }}">{{ $code }}</option>
@@ -429,11 +430,11 @@
                         @endif
                     </div>
 
-                    {{-- FILTER KODE ITEM: DESKTOP (kolom ketiga sejajar) --}}
+                    {{-- FILTER KODE ITEM: DESKTOP --}}
                     @if ($itemCodes->isNotEmpty())
                         <div class="col-md-4 d-none d-md-block">
                             <div class="help mb-1">Filter Kode Item (opsional)</div>
-                            <select id="filter-item-code" class="form-select form-select-sm">
+                            <select class="form-select form-select-sm filter-item-code">
                                 <option value="">Semua item...</option>
                                 @foreach ($itemCodes as $code)
                                     <option value="{{ $code }}">{{ $code }}</option>
@@ -475,7 +476,7 @@
                                     Belum Setor
                                 </th>
                                 <th style="width: 130px;" class="text-center">
-                                    Setor
+                                    Setor OK
                                 </th>
                                 <th style="width: 130px;" class="text-center">
                                     Reject
@@ -491,14 +492,18 @@
                                     $pickup = $line->sewingPickup ?? $selectedPickup;
                                     $lot = $bundle?->cuttingJob?->lot;
 
-                                    $remaining = (float) ($line->remaining_qty ?? 0);
+                                    $qtyBundle = (float) ($line->qty_bundle ?? 0);
+                                    $returnedOk = (float) ($line->qty_returned_ok ?? 0);
+                                    $returnedRej = (float) ($line->qty_returned_reject ?? 0);
+                                    $alreadyReturned = $returnedOk + $returnedRej;
+                                    $remaining = max($qtyBundle - $alreadyReturned, 0);
 
                                     $pickupDateLabel = '';
                                     if ($pickup && $pickup->date) {
                                         try {
-                                            $pickupDateLabel = id_day_datetime($pickup->created_at);
+                                            $pickupDateLabel = id_day($pickup->date);
                                         } catch (\Throwable $e) {
-                                            $pickupDateLabel = (string) $pickup->date;
+                                            $pickupDateLabel = optional($pickup->date)->format('d/m/Y') ?? '-';
                                         }
                                     }
 
@@ -565,6 +570,13 @@
                                                     </span>
                                                 @endif
                                             </div>
+                                            <div class="small text-muted mt-1">
+                                                Pickup: {{ number_format($qtyBundle, 2, ',', '.') }} pcs
+                                                @if ($alreadyReturned > 0)
+                                                    • Sudah setor:
+                                                    {{ number_format($alreadyReturned, 2, ',', '.') }} pcs
+                                                @endif
+                                            </div>
                                         </div>
 
                                         {{-- Mobile --}}
@@ -582,6 +594,13 @@
                                                     {{ $bundle->bundle_code }}
                                                 </span>
                                             @endif
+                                            <div class="mobile-muted-soft mt-1">
+                                                Pickup: {{ number_format($qtyBundle, 2, ',', '.') }} pcs
+                                                @if ($alreadyReturned > 0)
+                                                    • Sudah setor:
+                                                    {{ number_format($alreadyReturned, 2, ',', '.') }} pcs
+                                                @endif
+                                            </div>
                                         </div>
                                     </td>
 
@@ -609,24 +628,24 @@
                                         </div>
                                     </td>
 
-                                    {{-- SISA JADI (desktop) --}}
+                                    {{-- BELUM SETOR (desktop) --}}
                                     <td class="text-end align-top d-none d-md-table-cell">
                                         <span class="qty-remaining-pill">
                                             {{ number_format($remaining, 2, ',', '.') }}
                                         </span>
                                     </td>
 
-                                    {{-- QTY OK JADI --}}
+                                    {{-- QTY OK --}}
                                     <td class="text-end align-top">
                                         {{-- Desktop --}}
                                         <div class="d-none d-md-block">
                                             <input type="number" step="0.01" min="0" inputmode="decimal"
                                                 name="results[{{ $idx }}][qty_ok]"
                                                 class="form-control form-control-sm text-end qty-input qty-ok-input qty-ok-desktop @error("results.$idx.qty_ok") is-invalid @enderror"
-                                                value="{{ $defaultOk ?? '' }}" placeholder="Jumlah setor">
+                                                value="{{ $defaultOk ?? '' }}" placeholder="Jumlah OK">
                                         </div>
 
-                                        {{-- Mobile --}}
+                                        {{-- Mobile: OK + Reject dalam satu baris --}}
                                         <div class="cell-qty-row d-md-none">
                                             <input type="number" step="0.01" min="0" inputmode="decimal"
                                                 name="results[{{ $idx }}][qty_ok]"
@@ -706,7 +725,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const rows = document.querySelectorAll('.return-row');
-            const filterItemSelect = document.getElementById('filter-item-code');
+            const filterItemSelects = document.querySelectorAll('.filter-item-code');
 
             const clientErrorBox = document.getElementById('client-error-box');
             const clientErrorText = document.getElementById('client-error-text');
@@ -787,7 +806,7 @@
                     if (showError) {
                         const index = parseInt(row.dataset.rowIndex || '0', 10) + 1;
                         showClientError(
-                            `Qty OK + Reject tidak boleh melebihi Sisa Jadi (baris #${index}). Input sudah disesuaikan.`
+                            `Qty OK + Reject tidak boleh melebihi Belum Setor (baris #${index}). Input sudah disesuaikan.`
                         );
                     }
                 } else if (showError) {
@@ -826,17 +845,22 @@
                 }
             }
 
-            // FILTER KODE ITEM
-            if (filterItemSelect) {
-                filterItemSelect.addEventListener('change', function() {
+            // FILTER KODE ITEM (sync semua dropdown)
+            filterItemSelects.forEach(function(select) {
+                select.addEventListener('change', function() {
                     const code = this.value || '';
+
+                    // sync nilai ke semua select
+                    filterItemSelects.forEach(s => {
+                        if (s !== select) s.value = code;
+                    });
 
                     rows.forEach(function(row) {
                         const rowCode = (row.dataset.itemCode || '').trim();
                         row.hidden = code && rowCode !== code;
                     });
                 });
-            }
+            });
 
             rows.forEach(function(row) {
                 const okDesktop = row.querySelector('.qty-ok-desktop');

@@ -46,7 +46,8 @@ class PackingJob extends Model
     }
 
     /**
-     * Gudang asal, misal FG.
+     * Gudang asal.
+     * Saat ini dipakai sebagai gudang produksi (misal: WH-PRD).
      */
     public function warehouseFrom(): BelongsTo
     {
@@ -54,7 +55,8 @@ class PackingJob extends Model
     }
 
     /**
-     * Gudang tujuan, misal PCK.
+     * Gudang tujuan.
+     * Bisa dipakai nanti kalau kamu mau pindahkan ke WH-RTS / gudang lain.
      */
     public function warehouseTo(): BelongsTo
     {
@@ -63,18 +65,35 @@ class PackingJob extends Model
 
     /**
      * User yang membuat dokumen.
+     * Nama relasi: createdBy → untuk konsisten dengan modul lain (Cutting, Finishing, dll).
      */
-    public function creator(): BelongsTo
+    public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
     /**
+     * Alias lama (kalau ada yang terlanjur pakai $job->creator).
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->createdBy();
+    }
+
+    /**
      * User yang terakhir mengupdate dokumen.
+     */
+    public function updatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * Alias lama (kalau ada yang pakai $job->updater).
      */
     public function updater(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'updated_by');
+        return $this->updatedBy();
     }
 
     /*
@@ -91,6 +110,9 @@ class PackingJob extends Model
         return $this->status === 'posted';
     }
 
+    /**
+     * Total qty_packed (sum semua line).
+     */
     public function getTotalQtyPackedAttribute(): float
     {
         return (float) $this->lines()->sum('qty_packed');

@@ -1,6 +1,13 @@
+{{-- resources/views/production/packing_jobs/create.blade.php --}}
 @extends('layouts.app')
 
-@section('title', isset($job) ? 'Produksi • Edit Packing ' . $job->code : 'Produksi • Packing Baru')
+@php
+    /** @var \App\Models\PackingJob|null $job */
+    $isEdit = isset($job);
+    $pageTitle = $isEdit ? 'Edit Packing Job' : 'Packing Job Baru';
+@endphp
+
+@section('title', 'Produksi • ' . $pageTitle)
 
 @push('head')
     <style>
@@ -26,77 +33,64 @@
             font-size: .84rem;
         }
 
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .page-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .page-subtitle {
+            font-size: .85rem;
+            color: var(--muted);
+        }
+
         .table-wrap {
             overflow-x: auto;
-            padding-inline: .25rem;
         }
 
-        .table-packing {
-            margin-bottom: 0;
-            border-collapse: separate;
-            border-spacing: 0;
+        .bundle-row {
+            transition: background-color 150ms ease, box-shadow 150ms ease;
         }
 
-        .table-packing thead th {
-            font-size: .78rem;
-            text-transform: uppercase;
-            letter-spacing: .04em;
+        .bundle-row.is-new {
+            background: color-mix(in srgb, var(--primary, #0d6efd) 5%, var(--card) 95%);
         }
 
-        .table-packing tbody tr.line-row {
-            transition: background-color .12s ease;
-        }
-
-        .table-packing tbody tr.line-row:hover {
-            background: color-mix(in srgb, var(--card) 82%, var(--line) 18%);
-        }
-
-        .is-soft-invalid {
-            border-color: #f59f00 !important;
-            background-color: rgba(245, 159, 0, 0.06) !important;
+        .btn-icon {
+            padding-inline: .5rem;
         }
 
         @media (max-width: 767.98px) {
             .page-wrap {
-                padding-inline: .65rem;
+                padding-inline: .5rem;
             }
 
-            .table-packing thead {
+            .page-header {
+                align-items: flex-start;
+            }
+
+            .page-title {
+                font-size: 1rem;
+            }
+
+            .page-subtitle {
+                font-size: .8rem;
+            }
+
+            .table-wrap {
+                font-size: .86rem;
+            }
+
+            .btn-icon span.label {
                 display: none;
-            }
-
-            .table-packing {
-                border-spacing: 0 .6rem;
-            }
-
-            .table-packing tbody tr.line-row {
-                background: var(--card);
-                border-radius: 14px;
-                border: 1px solid var(--line);
-            }
-
-            .table-packing tbody tr.line-row>td {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: .3rem .75rem;
-                border-top: none !important;
-            }
-
-            .table-packing tbody tr.line-row>td[data-label]:before {
-                content: attr(data-label);
-                font-size: .78rem;
-                color: var(--muted);
-                margin-right: .75rem;
-                flex: 0 0 40%;
-                max-width: 42%;
-            }
-
-            .table-packing .form-control-sm,
-            .table-packing .form-select-sm {
-                font-size: .82rem;
-                padding-block: .18rem;
-                padding-inline: .35rem;
             }
         }
     </style>
@@ -104,250 +98,250 @@
 
 @section('content')
     <div class="page-wrap">
-        {{-- ERROR --}}
-        @if ($errors->any())
-            <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
-                <div class="fw-semibold mb-1">Terjadi kesalahan input:</div>
-                <ul class="mb-0 small">
-                    @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        @endif
 
         {{-- HEADER --}}
         <div class="card p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div class="page-header">
                 <div>
-                    <h1 class="h5 mb-1">
-                        {{ isset($job) ? 'Edit Packing ' . $job->code : 'Packing Job Baru' }}
-                    </h1>
-                    <div class="help">
-                        Pindahkan stok FG (K7BLK, dst) ke gudang PACKED.
-                        Qty FG akan mengikuti saldo, kamu cukup isi Qty Packed.
+                    <h1 class="page-title">{{ $pageTitle }}</h1>
+                    <div class="page-subtitle">
+                        Packing bersifat <strong>status</strong>, stok tetap berada di gudang produksi
+                        <strong>WH-PRD</strong>.
                     </div>
+                    @if ($isEdit)
+                        <div class="help mt-1">
+                            Kode: <span class="mono">{{ $job->code }}</span> • Status:
+                            <span class="badge rounded-pill bg-{{ $job->status === 'posted' ? 'success' : 'secondary' }}">
+                                {{ $job->status }}
+                            </span>
+                        </div>
+                    @endif
                 </div>
-                <div class="d-flex gap-2">
+                <div class="d-flex flex-column align-items-end gap-2">
                     <a href="{{ route('production.packing_jobs.index') }}" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-arrow-left me-1"></i> Kembali
+                        <i class="bi bi-list-ul me-1"></i>
+                        <span class="label">Semua Packing Job</span>
                     </a>
-                    @isset($job)
-                        @if ($job->status === 'draft')
-                            <a href="{{ route('production.packing_jobs.show', $job) }}" class="btn btn-sm btn-outline-primary">
-                                Lihat Detail
-                            </a>
-                        @endif
-                    @endisset
+                    @if ($isEdit)
+                        <a href="{{ route('production.packing_jobs.show', $job->id) }}"
+                            class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-eye me-1"></i>
+                            <span class="label">Lihat Detail</span>
+                        </a>
+                    @endif
                 </div>
             </div>
         </div>
 
-        {{-- FORM --}}
-        <form
-            action="{{ isset($job) ? route('production.packing_jobs.update', $job) : route('production.packing_jobs.store') }}"
-            method="post">
-            @csrf
-            @isset($job)
-                @method('PUT')
-            @endisset
+        {{-- FORM HEADER --}}
+        <div class="card p-3 mb-3">
+            @php
+                $action = $isEdit
+                    ? route('production.packing_jobs.update', $job->id)
+                    : route('production.packing_jobs.store');
+                $method = $isEdit ? 'PUT' : 'POST';
 
-            {{-- HEADER FORM --}}
-            <div class="card p-3 mb-3">
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <label class="form-label small mb-1">Tanggal</label>
-                        <input type="date" name="date" class="form-control form-control-sm"
-                            value="{{ old('date', $date ?? now()->toDateString()) }}" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small mb-1">Channel (opsional)</label>
-                        <input type="text" name="channel" class="form-control form-control-sm"
-                            value="{{ old('channel', $job->channel ?? '') }}" placeholder="Shopee / Toko / dll">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small mb-1">Referensi (opsional)</label>
-                        <input type="text" name="reference" class="form-control form-control-sm"
-                            value="{{ old('reference', $job->reference ?? '') }}" placeholder="SO-001 / DO-xxx">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small mb-1">Catatan (opsional)</label>
-                        <input type="text" name="notes" class="form-control form-control-sm"
-                            value="{{ old('notes', $job->notes ?? '') }}" placeholder="Packing untuk order...">
-                    </div>
-                </div>
-            </div>
+                $oldLines = old('lines', $lines ?? []);
+            @endphp
 
-            {{-- DETAIL LINES --}}
-            <div class="card p-3 mb-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <div>
-                        <div class="fw-semibold">Detail Item (FG → PACKED)</div>
-                        <div class="help">
-                            Pilih item FG (K7BLK, dst). Saldo FG akan terisi otomatis.
-                            Kamu cukup mengisi <strong>Qty Packed</strong>.
+            <form method="post" action="{{ $action }}" id="packing-form">
+                @csrf
+                @if ($isEdit)
+                    @method('PUT')
+                @endif
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Tanggal</label>
+                        <input type="date" name="date"
+                            class="form-control form-control-sm @error('date') is-invalid @enderror"
+                            value="{{ old('date', $date ?? now()->format('Y-m-d')) }}" required>
+                        @error('date')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="help mt-1">
+                            Tanggal dokumen packing.
                         </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-line">
-                        <i class="bi bi-plus-lg me-1"></i> Tambah baris
-                    </button>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Channel</label>
+                        <input type="text" name="channel"
+                            class="form-control form-control-sm @error('channel') is-invalid @enderror"
+                            value="{{ old('channel', $isEdit ? $job->channel : null) }}" list="channel-options"
+                            placeholder="Contoh: TOKO / ONLINE">
+                        <datalist id="channel-options">
+                            <option value="TOKO"></option>
+                            <option value="RESELLER"></option>
+                            <option value="WHOLESALE"></option>
+                            <option value="INTERNAL/SAMPLE"></option>
+                            <option value="ONLINE - WA"></option>
+                            <option value="ONLINE - IG"></option>
+                            <option value="ONLINE - Marketplace"></option>
+                            <option value="URGENT"></option>
+                        </datalist>
+                        @error('channel')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="help mt-1">
+                            Rekomendasi: TOKO, RESELLER, WHOLESALE, INTERNAL/SAMPLE, ONLINE - WA/IG/Marketplace, URGENT.
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Referensi</label>
+                        <input type="text" name="reference"
+                            class="form-control form-control-sm @error('reference') is-invalid @enderror"
+                            value="{{ old('reference', $isEdit ? $job->reference : null) }}"
+                            placeholder="No. order / catatan referensi">
+                        @error('reference')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                        <div class="help mt-1">
+                            Misal: ID order marketplace, nomor nota toko, nama customer, dll.
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Catatan</label>
+                        <textarea name="notes" rows="2" class="form-control form-control-sm @error('notes') is-invalid @enderror"
+                            placeholder="Catatan tambahan (opsional)">{{ old('notes', $isEdit ? $job->notes : null) }}</textarea>
+                        @error('notes')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
                 </div>
 
-                <div class="table-wrap">
-                    <table class="table table-sm align-middle table-packing" id="lines-table">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Item (FG)</th>
-                                <th class="text-end">Saldo FG</th>
-                                <th class="text-end">Qty Packed</th>
-                                <th>Catatan</th>
-                                <th style="width: 1%;"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @php
-                                $formLines = old('lines', $lines ?? []);
-                            @endphp
-
-                            @if (!empty($formLines))
-                                @foreach ($formLines as $i => $line)
+                {{-- TABEL DETAIL BARIS PACKING --}}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="fw-semibold">Detail Packing</div>
+                        <div class="d-flex gap-2">
+                            <select id="stock-picker" class="form-select form-select-sm" style="min-width: 220px;">
+                                <option value="">+ Tambah baris dari stok WH-PRD...</option>
+                                @foreach ($stocks as $stock)
                                     @php
-                                        $itemId = $line['item_id'] ?? null;
-                                        $fgBalance = (float) ($line['fg_balance'] ?? ($line['qty_fg'] ?? 0));
-                                        $qtyPacked = $line['qty_packed'] ?? $fgBalance;
+                                        $item = $stock->item;
+                                        $label = $item
+                                            ? trim(
+                                                ($item->code ?? '') .
+                                                    ' — ' .
+                                                    ($item->name ?? '') .
+                                                    ' ' .
+                                                    ($item->color ?? ''),
+                                            )
+                                            : 'ITEM-' . $stock->item_id;
                                     @endphp
-                                    <tr class="line-row">
-                                        {{-- ITEM --}}
-                                        <td data-label="Item (FG)">
-                                            <select name="lines[{{ $i }}][item_id]"
-                                                class="form-select form-select-sm item-select">
-                                                <option value="">Pilih item...</option>
-                                                @foreach ($stocks as $stock)
-                                                    @php
-                                                        $it = $stock->item;
-                                                        $optQty = (float) ($stock->qty ?? 0);
-                                                        $optLabel = $it
-                                                            ? trim(
-                                                                ($it->code ?? '') .
-                                                                    ' — ' .
-                                                                    ($it->name ?? '') .
-                                                                    ' ' .
-                                                                    ($it->color ?? ''),
-                                                            )
-                                                            : '';
-                                                    @endphp
-                                                    <option value="{{ $it->id ?? '' }}"
-                                                        data-fg-balance="{{ $optQty }}"
-                                                        data-item-label="{{ $optLabel }}" @selected($itemId == ($it->id ?? null))>
-                                                        {{ $optLabel }} ({{ number_format($optQty) }} pcs)
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                            <input type="hidden" name="lines[{{ $i }}][fg_balance]"
+                                    <option value="{{ $stock->item_id }}" data-label="{{ $label }}"
+                                        data-balance="{{ (float) $stock->qty }}">
+                                        {{ $label }} (stok: {{ number_format($stock->qty) }})
+                                    </option>
+                                @endforeach
+                            </select>
+
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-add-row">
+                                <i class="bi bi-plus-circle me-1"></i>
+                                <span class="label">Tambah Baris</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="table table-sm align-middle mb-0" id="lines-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 1%;">#</th>
+                                    <th>Item</th>
+                                    <th class="text-end">Saldo WH-PRD</th>
+                                    <th class="text-end">Qty Packed</th>
+                                    <th>Catatan</th>
+                                    <th style="width: 1%;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($oldLines as $i => $line)
+                                    @php
+                                        $nameBase = "lines[$i]";
+                                        $itemId = $line['item_id'] ?? null;
+                                        $itemLabel = $line['item_label'] ?? '';
+                                        // Untuk old() ketika validasi gagal, fg_balance & qty_packed sudah string
+                                        $fgBalance = $line['fg_balance'] ?? ($line['qty_fg'] ?? 0);
+                                        $qtyPacked = $line['qty_packed'] ?? 0;
+                                        $notesLine = $line['notes'] ?? null;
+                                    @endphp
+                                    <tr class="bundle-row">
+                                        <td class="text-muted small align-middle index-col">{{ $i + 1 }}</td>
+                                        <td>
+                                            <div class="small fw-semibold">
+                                                {{ $itemLabel }}
+                                            </div>
+                                            <input type="hidden" name="{{ $nameBase }}[item_id]"
+                                                value="{{ $itemId }}">
+                                            <input type="hidden" name="{{ $nameBase }}[item_label]"
+                                                value="{{ $itemLabel }}">
+                                            <input type="hidden" name="{{ $nameBase }}[fg_balance]"
                                                 value="{{ $fgBalance }}">
                                         </td>
-
-                                        {{-- SALDO FG --}}
-                                        <td data-label="Saldo FG" class="text-end mono">
-                                            <span class="fg-balance-label">{{ number_format($fgBalance) }}</span>
+                                        <td class="text-end mono">
+                                            {{ number_format((float) $fgBalance) }}
                                         </td>
-
-                                        {{-- QTY PACKED --}}
-                                        <td data-label="Qty Packed" class="text-end">
-                                            <input type="number" min="0" step="1"
-                                                name="lines[{{ $i }}][qty_packed]"
-                                                class="form-control form-control-sm text-end qty-packed-input"
-                                                value="{{ $qtyPacked }}">
+                                        <td class="text-end">
+                                            <input type="number" step="0.01" min="0"
+                                                class="form-control form-control-sm text-end"
+                                                name="{{ $nameBase }}[qty_packed]" value="{{ $qtyPacked }}">
                                         </td>
-
-                                        {{-- NOTES --}}
-                                        <td data-label="Catatan">
-                                            <input type="text" name="lines[{{ $i }}][notes]"
-                                                class="form-control form-control-sm" value="{{ $line['notes'] ?? '' }}"
-                                                placeholder="Opsional">
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm"
+                                                name="{{ $nameBase }}[notes]" value="{{ $notesLine }}"
+                                                placeholder="Catatan baris (opsional)">
                                         </td>
-
-                                        {{-- DELETE --}}
-                                        <td data-label="" class="text-center">
-                                            <button type="button" class="btn btn-sm btn-link text-danger btn-remove-line">
-                                                <i class="bi bi-x-lg"></i>
+                                        <td>
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-danger btn-icon btn-remove-row"
+                                                title="Hapus baris">
+                                                <i class="bi bi-x"></i>
                                             </button>
                                         </td>
                                     </tr>
-                                @endforeach
-                            @else
-                                {{-- 1 baris default --}}
-                                <tr class="line-row">
-                                    <td data-label="Item (FG)">
-                                        <select name="lines[0][item_id]" class="form-select form-select-sm item-select">
-                                            <option value="">Pilih item...</option>
-                                            @foreach ($stocks as $stock)
-                                                @php
-                                                    $it = $stock->item;
-                                                    $optQty = (float) ($stock->qty ?? 0);
-                                                    $optLabel = $it
-                                                        ? trim(
-                                                            ($it->code ?? '') .
-                                                                ' — ' .
-                                                                ($it->name ?? '') .
-                                                                ' ' .
-                                                                ($it->color ?? ''),
-                                                        )
-                                                        : '';
-                                                @endphp
-                                                <option value="{{ $it->id ?? '' }}"
-                                                    data-fg-balance="{{ $optQty }}"
-                                                    data-item-label="{{ $optLabel }}">
-                                                    {{ $optLabel }} ({{ number_format($optQty) }} pcs)
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        <input type="hidden" name="lines[0][fg_balance]" value="0">
-                                    </td>
-                                    <td data-label="Saldo FG" class="text-end mono">
-                                        <span class="fg-balance-label">0</span>
-                                    </td>
-                                    <td data-label="Qty Packed" class="text-end">
-                                        <input type="number" min="0" step="1" name="lines[0][qty_packed]"
-                                            class="form-control form-control-sm text-end qty-packed-input" value="0">
-                                    </td>
-                                    <td data-label="Catatan">
-                                        <input type="text" name="lines[0][notes]" class="form-control form-control-sm"
-                                            placeholder="Opsional">
-                                    </td>
-                                    <td data-label="" class="text-center">
-                                        <button type="button" class="btn btn-sm btn-link text-danger btn-remove-line">
-                                            <i class="bi bi-x-lg"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            @endif
-                        </tbody>
-                    </table>
+                                @empty
+                                    <tr class="empty-row">
+                                        <td colspan="6" class="text-center text-muted py-3">
+                                            Belum ada baris. Pilih item dari stok WH-PRD di atas untuk menambahkan.
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @error('lines')
+                        <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
+                    @foreach ($errors->get('lines.*.qty_packed') as $fieldErrors)
+                        @foreach ($fieldErrors as $fieldError)
+                            <div class="text-danger small mt-1">{{ $fieldError }}</div>
+                        @endforeach
+                    @endforeach
                 </div>
 
-                <div class="pt-2 mt-1 border-top">
+                {{-- ACTIONS --}}
+                <div class="d-flex justify-content-between align-items-center mt-3">
                     <div class="help">
-                        Qty Packed tidak boleh melebihi saldo FG.
-                        Form ini akan mengoreksi otomatis di sisi UI, tapi validasi akhir tetap di server.
+                        Setelah disimpan sebagai <strong>draft</strong> kamu bisa cek lagi, lalu posting
+                        (status saja, tidak mengubah stok WH-PRD).
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{{ route('production.packing_jobs.index') }}" class="btn btn-sm btn-outline-secondary">
+                            Batal
+                        </a>
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            {{ $isEdit ? 'Update Draft' : 'Simpan Draft' }}
+                        </button>
                     </div>
                 </div>
-            </div>
+            </form>
+        </div>
 
-            {{-- FOOTER --}}
-            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-                <div class="help">
-                    Packing Job akan disimpan sebagai <strong>draft</strong>.
-                    Stok baru bergerak setelah kamu klik <em>Posting</em> di halaman detail.
-                </div>
-                <div>
-                    <button type="submit" class="btn btn-primary">
-                        {{ isset($job) ? 'Update Draft' : 'Simpan Draft' }}
-                    </button>
-                </div>
-            </div>
-        </form>
     </div>
 @endsection
 
@@ -355,131 +349,137 @@
     <script>
         (function() {
             const tableBody = document.querySelector('#lines-table tbody');
-            const btnAdd = document.getElementById('btn-add-line');
+            const stockPicker = document.getElementById('stock-picker');
+            const addButton = document.getElementById('btn-add-row');
 
-            const nf = new Intl.NumberFormat('id-ID');
+            function getNextIndex() {
+                const rows = tableBody.querySelectorAll('tr.bundle-row');
+                return rows.length;
+            }
 
-            function reindexLines() {
-                const rows = tableBody.querySelectorAll('.line-row');
-                rows.forEach((row, index) => {
-                    row.querySelectorAll('select, input').forEach(input => {
+            function refreshIndices() {
+                tableBody.querySelectorAll('tr.bundle-row').forEach((row, idx) => {
+                    const idxCell = row.querySelector('.index-col');
+                    if (idxCell) {
+                        idxCell.textContent = idx + 1;
+                    }
+                    // rename input names
+                    row.querySelectorAll('input').forEach((input) => {
                         const name = input.getAttribute('name');
                         if (!name) return;
-                        const newName = name.replace(/lines\[\d+]/, 'lines[' + index + ']');
+                        const newName = name.replace(/lines\[\d+]/, 'lines[' + idx + ']');
                         input.setAttribute('name', newName);
                     });
                 });
             }
 
-            function sanitizeRow(row) {
-                const fgHidden = row.querySelector('input[name*="[fg_balance]"]');
-                const fgLabel = row.querySelector('.fg-balance-label');
-                const qtyInput = row.querySelector('.qty-packed-input');
-
-                if (!fgHidden || !fgLabel || !qtyInput) return;
-
-                let fgBalance = parseFloat(fgHidden.value || '0');
-                if (isNaN(fgBalance) || fgBalance < 0) fgBalance = 0;
-
-                let qty = parseFloat(qtyInput.value || '0');
-                if (isNaN(qty) || qty < 0) qty = 0;
-
-                if (qty > fgBalance) qty = fgBalance;
-
-                fgLabel.textContent = nf.format(fgBalance);
-                qtyInput.value = qty;
-
-                const over = qty > fgBalance + 0.000001;
-                qtyInput.classList.toggle('is-soft-invalid', over);
+            function ensureNotEmptyMessage() {
+                const rows = tableBody.querySelectorAll('tr.bundle-row');
+                const emptyRow = tableBody.querySelector('tr.empty-row');
+                if (rows.length === 0) {
+                    if (!emptyRow) {
+                        const tr = document.createElement('tr');
+                        tr.classList.add('empty-row');
+                        tr.innerHTML = `
+                            <td colspan="6" class="text-center text-muted py-3">
+                                Belum ada baris. Pilih item dari stok WH-PRD di atas untuk menambahkan.
+                            </td>
+                        `;
+                        tableBody.appendChild(tr);
+                    }
+                } else if (emptyRow) {
+                    emptyRow.remove();
+                }
             }
 
-            function handleItemChange(e) {
-                const select = e.target;
-                const row = select.closest('.line-row');
-                if (!row) return;
+            function addRowFromStock(stockOption) {
+                if (!stockOption || !stockOption.value) return;
 
-                const option = select.selectedOptions[0];
-                if (!option) return;
+                const itemId = stockOption.value;
+                const itemLabel = stockOption.dataset.label || stockOption.textContent.trim();
+                const balance = parseFloat(stockOption.dataset.balance || '0') || 0;
 
-                const fgHidden = row.querySelector('input[name*="[fg_balance]"]');
-                const fgLabel = row.querySelector('.fg-balance-label');
-                const qtyInput = row.querySelector('.qty-packed-input');
-
-                const fgBalStr = option.getAttribute('data-fg-balance') || '0';
-                const fgBal = parseFloat(fgBalStr) || 0;
-
-                if (fgHidden) fgHidden.value = fgBalStr;
-                if (fgLabel) fgLabel.textContent = nf.format(fgBal);
-                if (qtyInput) qtyInput.value = fgBalStr;
-
-                sanitizeRow(row);
-            }
-
-            function addLineRow() {
-                const lastRow = tableBody.querySelector('.line-row:last-child');
-                if (!lastRow) return;
-
-                const newRow = lastRow.cloneNode(true);
-
-                newRow.querySelectorAll('input').forEach(input => {
-                    if (input.type === 'hidden') {
-                        // reset fg_balance ke 0
-                        if (input.name && input.name.includes('[fg_balance]')) {
-                            input.value = '0';
-                        } else {
-                            input.value = '';
-                        }
-                        return;
-                    }
-
-                    if (input.type === 'number') {
-                        input.value = 0;
-                    } else if (input.type === 'text') {
-                        input.value = '';
-                    }
+                // Cek apakah sudah ada baris dengan item_id sama
+                const existing = Array.from(tableBody.querySelectorAll('tr.bundle-row')).find((row) => {
+                    const hiddenItem = row.querySelector('input[name*="[item_id]"]');
+                    return hiddenItem && hiddenItem.value == itemId;
                 });
 
-                newRow.querySelectorAll('select').forEach(select => {
-                    select.selectedIndex = 0;
-                });
+                if (existing) {
+                    existing.classList.add('is-new');
+                    setTimeout(() => existing.classList.remove('is-new'), 400);
+                    return;
+                }
 
-                const fgLabel = newRow.querySelector('.fg-balance-label');
-                if (fgLabel) fgLabel.textContent = '0';
+                const index = getNextIndex();
+                const nameBase = 'lines[' + index + ']';
 
-                tableBody.appendChild(newRow);
-                reindexLines();
-                sanitizeRow(newRow);
+                const tr = document.createElement('tr');
+                tr.classList.add('bundle-row', 'is-new');
+                tr.innerHTML = `
+                    <td class="text-muted small align-middle index-col">${index + 1}</td>
+                    <td>
+                        <div class="small fw-semibold">${itemLabel}</div>
+                        <input type="hidden" name="${nameBase}[item_id]" value="${itemId}">
+                        <input type="hidden" name="${nameBase}[item_label]" value="${itemLabel}">
+                        <input type="hidden" name="${nameBase}[fg_balance]" value="${balance}">
+                    </td>
+                    <td class="text-end mono">
+                        ${balance.toLocaleString('id-ID')}
+                    </td>
+                    <td class="text-end">
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            class="form-control form-control-sm text-end"
+                            name="${nameBase}[qty_packed]"
+                            value="${balance}"
+                        >
+                    </td>
+                    <td>
+                        <input
+                            type="text"
+                            class="form-control form-control-sm"
+                            name="${nameBase}[notes]"
+                            placeholder="Catatan baris (opsional)"
+                        >
+                    </td>
+                    <td>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-danger btn-icon btn-remove-row"
+                                title="Hapus baris">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+
+                setTimeout(() => tr.classList.remove('is-new'), 400);
+                ensureNotEmptyMessage();
             }
 
-            if (btnAdd) {
-                btnAdd.addEventListener('click', addLineRow);
-            }
+            addButton?.addEventListener('click', function() {
+                const opt = stockPicker.options[stockPicker.selectedIndex];
+                addRowFromStock(opt);
+            });
+
+            stockPicker?.addEventListener('change', function() {
+                const opt = stockPicker.options[stockPicker.selectedIndex];
+                addRowFromStock(opt);
+            });
 
             tableBody.addEventListener('click', function(e) {
-                if (e.target.closest('.btn-remove-line')) {
-                    const rows = tableBody.querySelectorAll('.line-row');
-                    if (rows.length <= 1) return; // minimal 1 baris
-                    e.target.closest('.line-row').remove();
-                    reindexLines();
+                if (e.target.closest('.btn-remove-row')) {
+                    const row = e.target.closest('tr');
+                    row?.remove();
+                    refreshIndices();
+                    ensureNotEmptyMessage();
                 }
             });
 
-            tableBody.addEventListener('change', function(e) {
-                if (e.target.classList.contains('item-select')) {
-                    handleItemChange(e);
-                }
-            });
-
-            tableBody.addEventListener('input', function(e) {
-                if (e.target.classList.contains('qty-packed-input')) {
-                    const row = e.target.closest('.line-row');
-                    if (!row) return;
-                    sanitizeRow(row);
-                }
-            });
-
-            // init semua baris awal
-            tableBody.querySelectorAll('.line-row').forEach(row => sanitizeRow(row));
+            // init
+            ensureNotEmptyMessage();
         })();
     </script>
 @endpush

@@ -136,6 +136,7 @@ class SewingPickupController extends Controller
             $createdLines = 0;
 
             foreach ($validated['lines'] as $row) {
+
                 $qty = (float) ($row['qty_bundle'] ?? 0);
                 if ($qty <= 0) {
                     continue; // baris kosong, skip
@@ -175,28 +176,22 @@ class SewingPickupController extends Controller
 
                 // ========= LOGIKA “STOK BUNDLE TERSISA” =========
 
-// 1️⃣ Hitung total yang sudah pernah dipick dari bundle ini
+// 1️⃣ Total yg sudah pernah dipick dari bundle ini (semua SWP lama)
                 $alreadyPicked = (float) SewingPickupLine::query()
                     ->where('cutting_job_bundle_id', $bundle->id)
-                // kalau mau hanya hitung pickup yg masih aktif / posted:
-                // ->whereHas('pickup', fn ($q) => $q->whereIn('status', ['draft', 'posted']))
                     ->sum('qty_bundle');
 
-// 2️⃣ Sisa qty berbasis QC (atau qty_pcs)
+// 2️⃣ Sisa qty berdasarkan QC (atau qty_pcs kalau belum ada QC)
                 $remainingByQc = max($maxQtyOk - $alreadyPicked, 0);
 
-// Tambahan safety: kalau karena suatu alasan QC/qty_pcs kacau,
-// tapi stok fisik di WIP-CUT masih ada, jangan langsung nol.
-// Kita clamp ke stok WIP-CUT.
+// 3️⃣ Cross-check dengan stok WIP-CUT (fisik)
                 $wipCutOnHand = $this->inventory->getOnHandQty(
                     warehouseId: $wipCutWarehouseId,
                     itemId: $bundle->finished_item_id,
                 );
 
-                $remaining = min(
-                    $remainingByQc > 0 ? $remainingByQc : $wipCutOnHand,
-                    $wipCutOnHand
-                );
+// Sisa yg boleh dipick = MIN( sisa QC , stok WIP-CUT )
+                $remaining = min($remainingByQc, $wipCutOnHand);
 
                 if ($remaining <= 0) {
                     // bundle ini sudah habis secara logis
@@ -246,21 +241,14 @@ class SewingPickupController extends Controller
                 $notes = "Sewing pickup {$pickup->code} - bundle {$bundle->bundle_code}";
 
                 // 1️⃣ Ambil unit_cost per pcs dari WIP-CUT untuk LOT + item ini
-                //    Ini memastikan biaya di WIP-SEW = biaya di WIP-CUT (tidak bikin HPP baru).
+
                 $unitCostPerPiece = $this->inventory->getItemIncomingUnitCost(
                     warehouseId: $wipCutWarehouseId,
                     itemId: $bundle->finished_item_id,
                 );
-
-                // Kalau mau extra safety:
+                //    Ini memastikan biaya di WIP-SEW = biaya di WIP-CUT (tidak bikin HPP baru).
                 if ($unitCostPerPiece === null || $unitCostPerPiece <= 0) {
-                    // fallback: kalau misal belum ada saldo WIP-CUT (kasus error data)
-                    // - bisa pakai getItemIncomingUnitCost
-                    // - atau set 0 tapi kamu harus aware HPP akan 0
-                    $unitCostPerPiece = $this->inventory->getItemIncomingUnitCost(
-                        warehouseId: $wipCutWarehouseId,
-                        itemId: $bundle->finished_item_id,
-                    );
+                    $unitCostPerPiece = 0; // atau biarkan null, tapi kamu harus sadar HPP = 0
                 }
 
                 // 1) Keluar dari WIP-CUT
@@ -294,7 +282,6 @@ class SewingPickupController extends Controller
 
                 $createdLines++;
             }
-
             // Kalau tidak ada satupun line valid, batal & lempar error
             if ($createdLines === 0) {
                 throw ValidationException::withMessages([

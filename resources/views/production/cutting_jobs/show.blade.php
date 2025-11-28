@@ -284,14 +284,16 @@
 
                             @if ($hasQcCutting)
                                 {{-- MODE SUDAH QC --}}
-
+                                {{-- @php
+                                    dd($qc->qty_ok);
+                                @endphp --}}
                                 <tr>
                                     <td>{{ $row->bundle_no }}</td>
                                     <td>{{ $row->bundle_code }}</td>
                                     <td>{{ $row->finishedItem?->code ?? '-' }}</td>
                                     <td>{{ number_format($row->qty_pcs, 2, ',', '.') }}</td>
                                     <td>{{ $qc ? number_format($qc->qty_reject ?? 0, 2, ',', '.') : '0,00' }}</td>
-                                    <td>{{ $qc ? number_format($qc->qty__ok ?? 0, 2, ',', '.') : '0,00' }}</td>
+                                    <td>{{ $qc ? number_format($qc->qty_ok ?? 0, 2, ',', '.') : '0,00' }}</td>
                                 </tr>
                             @else
                                 {{-- MODE BELUM QC --}}

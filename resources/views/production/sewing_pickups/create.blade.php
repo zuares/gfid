@@ -1,3 +1,4 @@
+{{-- resources/views/production/sewing_pickups/create.blade.php --}}
 @extends('layouts.app')
 
 @section('title', 'Produksi • Sewing Pickup')
@@ -56,12 +57,10 @@
             border-top-color: rgba(148, 163, 184, 0.25) !important;
         }
 
-        /* belum ada Qty Pickup (qty = 0) → aksen abu kiri */
         .row-empty {
             box-shadow: inset 3px 0 0 rgba(148, 163, 184, .35);
         }
 
-        /* qty > 0 → aksen biru */
         .row-picked {
             background: rgba(13, 110, 253, 0.03);
             box-shadow:
@@ -69,7 +68,6 @@
                 0 0 0 1px rgba(148, 163, 184, 0.32);
         }
 
-        /* Qty Ready pill (biru, konsisten dengan Bundles Ready) */
         .qty-ready-pill {
             border-radius: 999px;
             padding: .06rem .55rem;
@@ -81,17 +79,20 @@
 
         .summary-chip {
             border-radius: 999px;
-            padding: .15rem .6rem;
-            font-size: .76rem;
+            padding: .12rem .6rem;
+            font-size: .74rem;
             background: rgba(148, 163, 184, 0.12);
         }
 
         .summary-selected {
             font-size: .78rem;
             color: var(--muted);
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+            align-items: center;
         }
 
-        /* Qty input lebih kontras (bold + saat fokus) */
         .qty-input {
             font-weight: 500;
             transition: font-weight .12s ease, box-shadow .12s ease, border-color .12s ease;
@@ -103,9 +104,8 @@
             box-shadow: 0 0 0 1px rgba(37, 99, 235, .5);
         }
 
-        /* Filter controls */
         .filter-controls {
-            gap: .5rem;
+            gap: .4rem;
         }
 
         .btn-toggle-picked.active {
@@ -120,7 +120,6 @@
                 border-radius: 12px;
             }
 
-            /* Sedikit lebih lega untuk bottom-nav + tombol floating */
             .page-wrap {
                 padding-bottom: 6rem;
             }
@@ -256,25 +255,18 @@
                 font-size: .78rem;
             }
 
-            /* FOOTER: floating minimalis kanan bawah */
             .form-footer {
                 position: fixed;
                 right: .9rem;
                 bottom: 4.2rem;
-                /* pas di atas mobile bottom-nav */
                 left: auto;
-
                 z-index: 30;
-
                 display: inline-flex !important;
                 flex-direction: row-reverse;
-                /* Simpan di kanan, Batal di kiri */
                 align-items: center !important;
                 gap: .45rem;
-
                 margin: 0;
                 padding: 0;
-
                 background: transparent;
                 border: none;
             }
@@ -310,7 +302,6 @@
             }
         }
 
-        /* ============ DESKTOP (>= 768px) ============ */
         @media (min-width: 768px) {
             .td-mobile-extra {
                 display: none !important;
@@ -343,7 +334,6 @@
         <form id="sewing-pickup-form" action="{{ route('production.sewing_pickups.store') }}" method="post">
             @csrf
 
-            {{-- HEADER FORM --}}
             @php
                 $defaultWarehouseId = old('warehouse_id') ?: optional($warehouses->firstWhere('code', 'WIP-SEW'))->id;
                 $defaultWarehouse = $defaultWarehouseId ? $warehouses->firstWhere('id', $defaultWarehouseId) : null;
@@ -352,9 +342,9 @@
                 $autoDefaultOperatorId = $oldOperatorId ?: ($operators->count() === 1 ? $operators->first()->id : null);
             @endphp
 
+            {{-- HEADER FORM --}}
             <div class="card p-3 mb-3">
                 <div class="row g-3">
-                    {{-- CHANGED: in mobile hide Tanggal & Gudang Sewing --}}
                     <div class="col-md-3 col-6 d-none d-md-block">
                         <div class="help mb-1">Tanggal</div>
                         <input type="date" name="date"
@@ -385,7 +375,6 @@
                         @enderror
                     </div>
 
-                    {{-- CHANGED: text center di mobile, kiri di desktop --}}
                     <div class="col-md-3 col-12 text-center text-md-start">
                         <div class="help mb-1">Operator Jahit</div>
                         <select name="operator_id"
@@ -433,57 +422,33 @@
 
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                     <div>
-                        <h2 class="h6 mb-0">Pilih Bundles</h2>
-                        {{-- CHANGED: hilangkan teks bantuan mobile/desktop --}}
-                        {{-- <div class="help d-none d-md-block">
-                            Centang / klik baris / tombol <strong>Pick</strong> untuk isi Qty Pickup = Qty Ready.
-                        </div>
-                        <div class="help d-md-none">
-                            Tap kartu / centang / tombol <strong>Ambil = Ready</strong>.
-                        </div> --}}
-                    </div>
-
-                    {{-- CHANGED: hilangkan chip summary & summary-selected --}}
-                    {{-- @if ($totalBundlesReady > 0)
-                        <div class="d-flex flex-column align-items-md-end gap-1">
-                            <div class="d-flex flex-wrap gap-2">
-                                <span class="summary-chip mono">
-                                    {{ number_format($totalBundlesReady, 0, ',', '.') }} bundle ready
-                                </span>
-                                <span class="summary-chip mono">
-                                    {{ number_format($totalQtyReady, 2, ',', '.') }} pcs ready
-                                </span>
-                            </div>
-                            <div class="summary-selected mono" id="summary-selected-wrapper">
-                                <span id="summary-selected-bundles">0</span> bundle dipilih /
-                                <span id="summary-selected-qty">0,00</span> pcs pickup
-                            </div>
-                        </div>
-                    @endif --}}
-                </div>
-
-                {{-- CHANGED: hilangkan filter search + toggle --}}
-                {{-- @if ($totalBundlesReady > 0)
-                    <div class="d-flex flex-wrap align-items-center filter-controls mb-2">
-                        <div class="input-group input-group-sm" style="max-width: 260px;">
-                            <span class="input-group-text bg-light border-end-0">
-                                <i class="bi bi-search"></i>
+                        <h2 class="h6 mb-1">Pilih Bundles</h2>
+                        <div class="summary-selected">
+                            <span class="summary-chip">
+                                <span id="summary-selected-bundles">0</span> bundle terpilih
                             </span>
-                            <input type="text" id="bundle-filter-input" class="form-control border-start-0"
-                                placeholder="Cari bundle / item / lot...">
+                            <span class="summary-chip">
+                                Total pickup: <span id="summary-selected-qty">0,00</span> pcs
+                            </span>
+                            <span class="summary-chip">
+                                Ready: {{ number_format($totalQtyReady, 2, ',', '.') }} pcs
+                            </span>
                         </div>
-
-                        <button type="button" id="toggle-picked-only"
-                            class="btn btn-sm btn-outline-secondary ms-0 ms-md-2">
-                            <i class="bi bi-funnel"></i>
-                            <span class="d-none d-sm-inline">Hanya yang diambil</span>
+                    </div>
+                    <div class="d-flex align-items-center filter-controls">
+                        <input type="text" id="bundle-filter-input" class="form-control form-control-sm"
+                            placeholder="Cari bundle / item ...">
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-toggle-picked"
+                            id="toggle-picked-only">
+                            Picked saja
                         </button>
                     </div>
-                @endif --}}
+                </div>
 
                 @error('lines')
                     <div class="alert alert-danger py-1 small mb-2">
-                        {{ $message }}</div>
+                        {{ $message }}
+                    </div>
                 @enderror
 
                 <div class="table-wrap">
@@ -509,7 +474,9 @@
 
                                     $oldLine = $oldLines[$idx] ?? null;
 
+                                    // Hasil QC OK (atau fallback ke qty_pcs)
                                     $qtyOk = (float) ($b->qty_cutting_ok ?? ($qc?->qty_ok ?? $b->qty_pcs));
+                                    // Sisa untuk sewing (scope readyForSewing harus sudah hitung ini)
                                     $qtyRemain = (float) ($b->qty_remaining_for_sewing ?? $qtyOk);
 
                                     if ($qtyRemain <= 0) {
@@ -527,8 +494,12 @@
                                     data-qty-ready="{{ $qtyRemain }}" data-bundle-code="{{ $b->bundle_code }}"
                                     data-item-code="{{ $b->finishedItem?->code }}"
                                     data-item-name="{{ $b->finishedItem?->name }}">
-                                    <input type="hidden" name="lines[{{ $idx }}][bundle_id]"
-                                        value="{{ $b->id }}">
+
+                                    {{-- HIDDEN bundle_id - SATU KALI per row --}}
+                                    <td class="d-none">
+                                        <input type="hidden" name="lines[{{ $idx }}][bundle_id]"
+                                            value="{{ $b->id }}">
+                                    </td>
 
                                     {{-- DESKTOP --}}
                                     <td class="d-none d-md-table-cell td-desktop-only text-center">
@@ -572,10 +543,11 @@
                                     </td>
 
                                     <td class="d-none d-md-table-cell td-desktop-only text-end">
+                                        {{-- CANONICAL INPUT: hanya ini yang punya "name" & dikirim ke server --}}
                                         <input type="number" step="0.01" min="0" inputmode="decimal"
                                             name="lines[{{ $idx }}][qty_bundle]"
                                             class="form-control form-control-sm text-end qty-input @error("lines.$idx.qty_bundle") is-invalid @enderror"
-                                            value="{{ $defaultQtyPickup ?? '' }}"
+                                            value="{{ old("lines.$idx.qty_bundle", $defaultQtyPickup) }}"
                                             placeholder="{{ number_format($qtyRemain, 2, ',', '.') }}">
                                         @error("lines.$idx.qty_bundle")
                                             <div class="invalid-feedback">{{ $message }}</div>
@@ -636,10 +608,10 @@
                                                 <div class="pickup-label">
                                                     Pickup (max {{ number_format($qtyRemain, 2, ',', '.') }})
                                                 </div>
+                                                {{-- INPUT MOBILE: TANPA "name", hanya mirror ke desktop via JS --}}
                                                 <input type="number" step="0.01" min="0" inputmode="decimal"
-                                                    name="lines[{{ $idx }}][qty_bundle]"
                                                     class="form-control form-control-sm text-end qty-input @error("lines.$idx.qty_bundle") is-invalid @enderror"
-                                                    value="{{ $defaultQtyPickup ?? '' }}"
+                                                    value="{{ old("lines.$idx.qty_bundle", $defaultQtyPickup) }}"
                                                     placeholder="{{ number_format($qtyRemain, 2, ',', '.') }}">
                                                 @error("lines.$idx.qty_bundle")
                                                     <div class="invalid-feedback">{{ $message }}</div>
@@ -700,7 +672,6 @@
                         <strong>WIP-SEW</strong>.
                     </p>
 
-                    {{-- Summary operator, tanggal & bundles terpilih --}}
                     <div id="confirm-summary" class="border-top pt-2 mt-2 small"></div>
                 </div>
                 <div class="modal-footer py-2">
@@ -723,13 +694,10 @@
             const summaryQtySpan = document.getElementById('summary-selected-qty');
             const confirmSummaryEl = document.getElementById('confirm-summary');
 
-            // CHANGED: filter elements sekarang tidak ada di DOM,
-            // tapi kode di bawah aman karena cek null.
             const searchInput = document.getElementById('bundle-filter-input');
             const togglePickedBtn = document.getElementById('toggle-picked-only');
             let showPickedOnly = false;
 
-            // Formatter qty
             let nf;
             try {
                 nf = new Intl.NumberFormat('id-ID', {
@@ -761,7 +729,6 @@
             }
 
             function updateGlobalSummary() {
-                // CHANGED: sekarang summary di header di-hide, jadi kalau element tidak ada langsung keluar
                 if (!summaryBundlesSpan || !summaryQtySpan) return;
 
                 let pickedBundles = 0;
@@ -781,7 +748,6 @@
                 summaryBundlesSpan.textContent = pickedBundles.toString();
                 summaryQtySpan.textContent = nf.format(totalPickupQty);
 
-                // apply filter condition (especially when toggle "hanya yang diambil" aktif)
                 applyRowVisibility();
             }
 
@@ -805,7 +771,7 @@
                     operatorText = operatorSelect.options[operatorSelect.selectedIndex].text;
                 }
 
-                const dateInput = document.querySelector('input[name="date"]'); // CHANGED: ambil Tanggal Ambil
+                const dateInput = document.querySelector('input[name="date"]');
                 const pickupDate = dateInput ? dateInput.value : '';
 
                 const lines = [];
@@ -837,7 +803,6 @@
                     return;
                 }
 
-                // CHANGED: list Item Jadi + Qty, plus menampilkan Tanggal Ambil
                 const listHtml = lines.map(function(line) {
                     const itemLabel =
                         `${escapeHtml(line.item)}${line.name ? ' — ' + escapeHtml(line.name) : ''}`;
@@ -886,12 +851,28 @@
 
                 if (!qtyInputs.length) return;
 
+                // Asumsi: qtyInputs[0] = DESKTOP (punya name), qtyInputs[1] = MOBILE (tanpa name)
+                const desktopInput = qtyInputs[0];
+                const mobileInput = qtyInputs.length > 1 ? qtyInputs[1] : null;
+
                 function getCurrentQty() {
-                    return parseFloat(qtyInputs[0].value || '0');
+                    return parseFloat(desktopInput.value || '0');
                 }
 
                 function isPicked() {
                     return getCurrentQty() > 0;
+                }
+
+                function syncInputsFromDesktop() {
+                    const val = desktopInput.value;
+                    if (mobileInput) {
+                        mobileInput.value = val;
+                    }
+                }
+
+                function syncDesktopFromMobile() {
+                    if (!mobileInput) return;
+                    desktopInput.value = mobileInput.value;
                 }
 
                 function updateVisual() {
@@ -912,12 +893,12 @@
 
                 function applyFromState(picked) {
                     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-
                     const nextQty = picked ? qtyReady : 0;
 
-                    qtyInputs.forEach(function(input) {
-                        input.value = nextQty > 0 ? nextQty : '';
-                    });
+                    desktopInput.value = nextQty > 0 ? nextQty : '';
+                    if (mobileInput) {
+                        mobileInput.value = desktopInput.value;
+                    }
 
                     updateVisual();
                     updateGlobalSummary();
@@ -933,7 +914,6 @@
                     applyFromState(nextState);
                 }
 
-                // Klik baris → toggle (kecuali klik input/checkbox/button)
                 row.addEventListener('click', function(e) {
                     if (
                         e.target.tagName === 'INPUT' ||
@@ -944,16 +924,14 @@
                     togglePicked();
                 });
 
-                // Tombol Pick → toggle
                 pickButtons.forEach(function(btn) {
                     btn.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
-                        togglePicked();
+                        applyFromState(true); // Ambil = Ready
                     });
                 });
 
-                // Checkbox → set qty = ready / 0
                 rowChecks.forEach(function(chk) {
                     chk.addEventListener('change', function(e) {
                         e.stopPropagation();
@@ -961,41 +939,60 @@
                     });
                 });
 
-                // Input qty: select all + bold saat fokus, update summary
-                qtyInputs.forEach(function(input) {
-                    input.addEventListener('focus', function() {
+                // Desktop input
+                desktopInput.addEventListener('focus', function() {
+                    this.select();
+                    this.classList.add('qty-input-active');
+                });
+
+                desktopInput.addEventListener('blur', function() {
+                    this.classList.remove('qty-input-active');
+                    syncInputsFromDesktop();
+                    updateVisual();
+                    updateGlobalSummary();
+                });
+
+                desktopInput.addEventListener('input', function() {
+                    syncInputsFromDesktop();
+                    updateVisual();
+                    updateGlobalSummary();
+                });
+
+                // Mobile input (mirror ke desktop)
+                if (mobileInput) {
+                    mobileInput.addEventListener('focus', function() {
                         this.select();
                         this.classList.add('qty-input-active');
                     });
 
-                    input.addEventListener('blur', function() {
+                    mobileInput.addEventListener('blur', function() {
                         this.classList.remove('qty-input-active');
+                        syncDesktopFromMobile();
                         updateVisual();
                         updateGlobalSummary();
                     });
 
-                    input.addEventListener('input', function() {
+                    mobileInput.addEventListener('input', function() {
+                        syncDesktopFromMobile();
                         updateVisual();
                         updateGlobalSummary();
                     });
-                });
+                }
 
-                // init state dari old()
+                // Initial visual state
+                syncInputsFromDesktop();
                 updateVisual();
             });
 
-            // summary awal + visibility awal
             updateGlobalSummary();
             applyRowVisibility();
 
-            // FILTER: search (saat ini tidak ada input-nya, tapi cek null aman)
             if (searchInput) {
                 searchInput.addEventListener('input', function() {
                     applyRowVisibility();
                 });
             }
 
-            // FILTER: toggle hanya yang diambil (button sudah tidak ada, ini aman)
             if (togglePickedBtn) {
                 togglePickedBtn.addEventListener('click', function() {
                     showPickedOnly = !showPickedOnly;
@@ -1004,7 +1001,7 @@
                 });
             }
 
-            // Konfirmasi dengan Bootstrap Modal
+            // Modal konfirmasi
             const form = document.getElementById('sewing-pickup-form');
             const confirmModalEl = document.getElementById('confirmSubmitModal');
             const confirmBtn = document.getElementById('btn-confirm-submit');
@@ -1021,14 +1018,13 @@
 
                     e.preventDefault();
 
-                    // CHANGED: peringatan jika operator belum dipilih
                     const operatorSelect = document.getElementById('operator-select');
                     if (!operatorSelect || !operatorSelect.value) {
                         alert('Silakan pilih operator jahit terlebih dahulu sebelum menyimpan.');
                         return;
                     }
 
-                    buildConfirmSummary(); // isi daftar bundle + operator + tanggal
+                    buildConfirmSummary();
                     confirmModal.show();
                 });
 
@@ -1039,7 +1035,7 @@
                 });
             }
 
-            // Fokus otomatis ke Operator Jahit di mobile
+            // Fokus operator di mobile
             const operatorSelect = document.getElementById('operator-select');
             if (operatorSelect && window.innerWidth < 768) {
                 operatorSelect.scrollIntoView({

@@ -71,6 +71,10 @@
             align-items: flex-end;
         }
 
+        .filters-row>div {
+            min-width: 160px;
+        }
+
         .filters-row .form-label {
             font-size: .8rem;
             color: var(--muted);
@@ -83,6 +87,7 @@
 
         .table-report {
             margin-bottom: 0;
+            white-space: nowrap;
         }
 
         .table-report thead th {
@@ -110,16 +115,37 @@
                 padding-inline: .5rem;
             }
 
-            .table-wrap {
-                font-size: .86rem;
-            }
-
             .page-title {
                 font-size: 1rem;
             }
 
             .page-subtitle {
                 font-size: .8rem;
+            }
+
+            .table-wrap {
+                font-size: .86rem;
+            }
+
+            .filters-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .filters-row>div {
+                width: 100%;
+            }
+
+            .filters-row .flex-grow-1 {
+                display: none;
+            }
+
+            .page-header {
+                align-items: flex-start;
+            }
+
+            .page-header .d-flex.align-items-end {
+                align-items: flex-start !important;
             }
         }
     </style>
@@ -138,7 +164,9 @@
                     <div>
                         <h1 class="page-title">Report Finishing per Item</h1>
                         <div class="page-subtitle">
-                            Rekap hasil finishing (FG & Reject) yang sudah <strong>posted</strong>, dikelompokkan per item.
+                            Rekap hasil finishing (masuk <strong>Gudang Produksi / WH-PRD</strong> &amp;
+                            <strong>REJECT</strong>)
+                            yang sudah <strong>posted</strong>, dikelompokkan per item.
                             Klik nama item untuk melihat detail Finishing Job yang membentuk angka tersebut.
                         </div>
                     </div>
@@ -166,7 +194,9 @@
                         <input type="date" name="date_to" class="form-control form-control-sm"
                             value="{{ $dateTo }}">
                     </div>
+
                     <div class="flex-grow-1"></div>
+
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-sm btn-primary">
                             <i class="bi bi-funnel me-1"></i> Terapkan
@@ -185,25 +215,25 @@
             @endphp
 
             <div class="row g-3">
-                <div class="col-md-4">
+                <div class="col-md-4 col-6">
                     <div class="small text-muted mb-1">Total Item</div>
                     <div class="h5 mb-0 mono">{{ $totalRows }}</div>
                     <div class="help">
                         Jumlah item yang punya aktivitas finishing pada periode ini.
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="small text-muted mb-1">Total OK (FG)</div>
+                <div class="col-md-4 col-6">
+                    <div class="small text-muted mb-1">Total OK (WH-PRD)</div>
                     <div class="h5 mb-0 mono text-success">{{ number_format($grandTotalOk) }}</div>
                     <div class="help">
-                        Total pcs masuk gudang FG (semua item).
+                        Total pcs masuk <strong>Gudang Produksi (WH-PRD)</strong> dari finishing.
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-4 col-6">
                     <div class="small text-muted mb-1">Total Reject</div>
                     <div class="h5 mb-0 mono text-danger">{{ number_format($grandTotalReject) }}</div>
                     <div class="help">
-                        Total pcs masuk gudang REJECT (semua item).
+                        Total pcs masuk gudang <strong>REJECT</strong> (semua item).
                     </div>
                 </div>
             </div>
@@ -211,7 +241,7 @@
 
         {{-- TABEL REKAP PER ITEM --}}
         <div class="card p-0 mb-4">
-            <div class="px-3 pt-3 pb-2 d-flex justify-content-between align-items-center">
+            <div class="px-3 pt-3 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <div class="fw-semibold">Rekap per Item</div>
                     <div class="help">
@@ -230,7 +260,7 @@
                             <th style="width: 1%;">#</th>
                             <th>Item</th>
                             <th class="text-end">Qty In</th>
-                            <th class="text-end text-success">OK (FG)</th>
+                            <th class="text-end text-success">OK (WH-PRD)</th>
                             <th class="text-end text-danger">Reject</th>
                             <th class="text-end">Reject %</th>
                         </tr>
@@ -238,7 +268,7 @@
                     <tbody>
                         @forelse ($rows as $i => $row)
                             @php
-                                // Asumsi controller: $rows adalah koleksi FinishingJobLine agregat
+                                // Asumsi controller: $rows adalah koleksi agregat FinishingJobLine
                                 // dengan relasi item sudah di-with('item').
                                 $item = $row->item ?? null;
                                 $rejectPct = $row->total_in > 0 ? ($row->total_reject / $row->total_in) * 100 : 0;
@@ -294,18 +324,19 @@
                                 </td>
                             </tr>
                         @endforelse
-                        @if ($rows->isNotEmpty())
-                    <tfoot>
-                        <tr class="table-light">
-                            <th colspan="2" class="text-end">TOTAL</th>
-                            <th class="text-end mono">{{ number_format($grandTotalIn) }}</th>
-                            <th class="text-end mono text-success">{{ number_format($grandTotalOk) }}</th>
-                            <th class="text-end mono text-danger">{{ number_format($grandTotalReject) }}</th>
-                            <th></th>
-                        </tr>
-                    </tfoot>
-                    @endif
                     </tbody>
+
+                    @if ($rows->isNotEmpty())
+                        <tfoot>
+                            <tr class="table-light">
+                                <th colspan="2" class="text-end">TOTAL</th>
+                                <th class="text-end mono">{{ number_format($grandTotalIn) }}</th>
+                                <th class="text-end mono text-success">{{ number_format($grandTotalOk) }}</th>
+                                <th class="text-end mono text-danger">{{ number_format($grandTotalReject) }}</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    @endif
                 </table>
             </div>
         </div>
@@ -313,6 +344,8 @@
         {{-- FOOT NOTE --}}
         <div class="help mb-4">
             Data diambil dari Finishing Job dengan status <strong>posted</strong>.
+            Stok OK dipindahkan dari <strong>WIP-FIN</strong> ke <strong>Gudang Produksi (WH-PRD)</strong>,
+            sedangkan Reject ke <strong>REJECT</strong>.
         </div>
     </div>
 @endsection

@@ -364,13 +364,13 @@ class CuttingJobController extends Controller
                 $q->where('stage', QcResult::STAGE_CUTTING); // atau 'cutting' kalau belum pakai constant
             },
         ]);
+
         // Cek apakah sudah pernah di-QC Cutting (langsung via query)
         $hasQcCutting = $cuttingJob->bundles()
             ->whereHas('qcResults', function ($q) {
                 $q->where('stage', QcResult::STAGE_CUTTING); // atau 'cutting'
             })
             ->exists();
-
         return view('production.cutting_jobs.show', [
             'job' => $cuttingJob,
             'hasQcCutting' => $hasQcCutting,

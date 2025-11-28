@@ -126,19 +126,23 @@ Route::middleware(['auth'])->group(function () {
         });
 
         // ==========================
-        // PRODUCTION REPORTS
+        // FINISHING JOBS + REPORTS
         // ==========================
 
         // action khusus untuk posting & jalankan inventory
         Route::post('finishing_jobs/{finishing_job}/post', [FinishingJobController::class, 'post'])
             ->name('finishing_jobs.post');
+
         // 🔁 action untuk UNPOST (balikkan stok)
         Route::post('finishing_jobs/{finishing_job}/unpost', [FinishingJobController::class, 'unpost'])
             ->name('finishing_jobs.unpost');
+
         Route::get('finishing_jobs/bundles-ready', [FinishingJobController::class, 'readyBundles'])
             ->name('finishing_jobs.bundles_ready');
+
         Route::resource('finishing_jobs', FinishingJobController::class)
             ->except(['destroy']);
+
         // Report Finishing per Item (header)
         Route::get('finishing_jobs/report/per-item', [FinishingJobController::class, 'reportPerItem'])
             ->name('finishing_jobs.report_per_item');
@@ -147,26 +151,23 @@ Route::middleware(['auth'])->group(function () {
         Route::get('finishing_jobs/report/per-item/{item}', [FinishingJobController::class, 'reportPerItemDetail'])
             ->name('finishing_jobs.report_per_item_detail');
 
-    });
-});
+        // ==========================
+        // PACKING (PURE STATUS, WH-PRD)
+        // ==========================
 
-Route::prefix('production')
-    ->name('production.')
-    ->middleware(['auth'])
-    ->group(function () {
+        // Daftar item WH-PRD yang siap di-packing (ready items)
+        Route::get('packing/ready-items', [PackingJobController::class, 'readyItems'])
+            ->name('packing_jobs.ready_items');
 
-        Route::get('packing/fg-ready', [PackingJobController::class, 'readyItems'])
-            ->name('packing.fg_ready');
+        // CRUD Packing Job
         Route::resource('packing_jobs', PackingJobController::class)
             ->except(['destroy']);
 
+        // Post / Unpost (status saja)
         Route::post('packing_jobs/{packing_job}/post', [PackingJobController::class, 'post'])
             ->name('packing_jobs.post');
 
         Route::post('packing_jobs/{packing_job}/unpost', [PackingJobController::class, 'unpost'])
             ->name('packing_jobs.unpost');
-
-        // (opsional) daftar item FG ready to pack
-        Route::get('packing/fg-ready', [PackingJobController::class, 'readyItems'])
-            ->name('packing.fg_ready');
     });
+});

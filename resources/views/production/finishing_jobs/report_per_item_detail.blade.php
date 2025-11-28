@@ -1,3 +1,4 @@
+{{-- resources/views/production/finishing_jobs/report_per_item_detail.blade.php --}}
 @extends('layouts.app')
 
 @section('title', 'Report • Finishing Item ' . ($item->code ?? ''))
@@ -48,6 +49,15 @@
             .table-wrap {
                 font-size: .86rem;
             }
+
+            .card .d-flex.justify-content-between {
+                flex-direction: column;
+                align-items: flex-start !important;
+            }
+
+            .card .d-flex.align-items-end {
+                align-items: flex-start !important;
+            }
         }
     </style>
 @endpush
@@ -60,14 +70,17 @@
             <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
                 <div>
                     <h1 class="h5 mb-1">Drilldown Finishing • Item</h1>
+
                     <div class="badge-item mb-2">
                         <span class="mono">{{ $item->code }}</span>
                         <span>— {{ $item->name }} {{ $item->color }}</span>
                     </div>
+
                     <div class="help">
                         Menampilkan list Finishing Job <strong>posted</strong> yang berisi item ini,
-                        lengkap dengan Qty In, OK, dan Reject per job.
+                        lengkap dengan Qty In, OK (masuk WH-PRD), dan Reject per job.
                     </div>
+
                     @if ($dateFrom || $dateTo)
                         <div class="help mt-1">
                             Periode:
@@ -95,6 +108,7 @@
                         class="btn btn-sm btn-outline-secondary">
                         <i class="bi bi-arrow-left me-1"></i> Kembali ke rekap per item
                     </a>
+
                     <a href="{{ route('production.finishing_jobs.index') }}" class="btn btn-sm btn-outline-secondary">
                         <i class="bi bi-list-ul me-1"></i> Semua Finishing Job
                     </a>
@@ -105,27 +119,27 @@
         {{-- SUMMARY --}}
         <div class="card p-3 mb-3">
             <div class="row g-3">
-                <div class="col-md-4">
+                <div class="col-md-4 col-6">
                     <div class="small text-muted mb-1">Total Qty In</div>
                     <div class="h5 mono mb-0">{{ number_format($grandTotalIn) }}</div>
-                    <div class="help">Total pcs item ini yang masuk finishing.</div>
+                    <div class="help">Total pcs item ini yang masuk proses finishing.</div>
                 </div>
-                <div class="col-md-4">
-                    <div class="small text-muted mb-1">Total OK (FG)</div>
+                <div class="col-md-4 col-6">
+                    <div class="small text-muted mb-1">Total OK (WH-PRD)</div>
                     <div class="h5 mono text-success mb-0">{{ number_format($grandTotalOk) }}</div>
-                    <div class="help">Masuk gudang FG untuk item ini.</div>
+                    <div class="help">Total pcs item ini yang masuk <strong>Gudang Produksi (WH-PRD)</strong>.</div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-4 col-6">
                     <div class="small text-muted mb-1">Total Reject</div>
                     <div class="h5 mono text-danger mb-0">{{ number_format($grandTotalReject) }}</div>
-                    <div class="help">Masuk gudang REJECT untuk item ini.</div>
+                    <div class="help">Total pcs item ini yang masuk gudang REJECT.</div>
                 </div>
             </div>
         </div>
 
         {{-- TABEL DETAIL JOB --}}
         <div class="card p-0 mb-4">
-            <div class="px-3 pt-3 pb-2 d-flex justify-content-between align-items-center">
+            <div class="px-3 pt-3 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <div class="fw-semibold">Finishing Job yang berisi item ini</div>
                     <div class="help">
@@ -146,7 +160,7 @@
                             <th>Tanggal</th>
                             <th>Dibuat oleh</th>
                             <th class="text-end">Qty In</th>
-                            <th class="text-end text-success">OK</th>
+                            <th class="text-end text-success">OK (WH-PRD)</th>
                             <th class="text-end text-danger">Reject</th>
                             <th class="text-end">Reject %</th>
                         </tr>
@@ -179,7 +193,11 @@
                                 {{-- TANGGAL --}}
                                 <td class="mono">
                                     @if ($job && $job->date)
-                                        {{ function_exists('id_date') ? id_date($job->date) : $job->date->format('Y-m-d') }}
+                                        @if (function_exists('id_date'))
+                                            {{ id_date($job->date) }}
+                                        @else
+                                            {{ $job->date instanceof \DateTimeInterface ? $job->date->format('Y-m-d') : $job->date }}
+                                        @endif
                                     @else
                                         <span class="text-muted small">-</span>
                                     @endif
@@ -223,19 +241,19 @@
                                 </td>
                             </tr>
                         @endforelse
-
-                        @if ($rows->isNotEmpty())
-                    <tfoot>
-                        <tr class="table-light">
-                            <th colspan="4" class="text-end">TOTAL</th>
-                            <th class="text-end mono">{{ number_format($grandTotalIn) }}</th>
-                            <th class="text-end mono text-success">{{ number_format($grandTotalOk) }}</th>
-                            <th class="text-end mono text-danger">{{ number_format($grandTotalReject) }}</th>
-                            <th></th>
-                        </tr>
-                    </tfoot>
-                    @endif
                     </tbody>
+
+                    @if ($rows->isNotEmpty())
+                        <tfoot>
+                            <tr class="table-light">
+                                <th colspan="4" class="text-end">TOTAL</th>
+                                <th class="text-end mono">{{ number_format($grandTotalIn) }}</th>
+                                <th class="text-end mono text-success">{{ number_format($grandTotalOk) }}</th>
+                                <th class="text-end mono text-danger">{{ number_format($grandTotalReject) }}</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    @endif
                 </table>
             </div>
         </div>

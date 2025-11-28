@@ -128,7 +128,8 @@ class SewingReturnController extends Controller
                         $returnedOk = (float) ($line->qty_returned_ok ?? 0);
                         $returnedRej = (float) ($line->qty_returned_reject ?? 0);
 
-                        $remaining = $qtyBundle - ($returnedOk + $returnedRej);
+// pastikan ga negatif
+                        $remaining = max($qtyBundle - ($returnedOk + $returnedRej), 0);
                         $line->remaining_qty = max($remaining, 0);
 
                         return $line;

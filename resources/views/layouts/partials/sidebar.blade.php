@@ -27,7 +27,7 @@
 
     // Production Packing
     $prodPackOpen =
-        request()->routeIs('production.packing_jobs.*') || request()->routeIs('production.packing.fg_ready');
+        request()->routeIs('production.packing_jobs.*') || request()->routeIs('production.packing_jobs.ready_items');
 
     // Production QC (cutting / sewing nanti)
     $prodQcOpen = request()->routeIs('production.qc.*');
@@ -477,10 +477,10 @@
                     <span>Packing Job Baru</span>
                 </a>
 
-                <a href="{{ route('production.packing.fg_ready') }}"
-                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.packing.fg_ready') ? 'active' : '' }}">
+                <a href="{{ route('production.packing_jobs.ready_items') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.packing_jobs.ready_items') ? 'active' : '' }}">
                     <span class="icon">📦</span>
-                    <span>FG Ready to Pack</span>
+                    <span>Ready Items (WH-PRD)</span>
                 </a>
             </div>
         </li>
