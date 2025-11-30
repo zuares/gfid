@@ -6,14 +6,18 @@
 @push('head')
     <style>
         .page-wrap {
-            max-width: 1100px;
+            max-width: 1080px;
             margin-inline: auto;
         }
 
         .card {
             background: var(--card);
             border: 1px solid var(--line);
-            border-radius: 14px;
+            border-radius: 16px;
+        }
+
+        .card-soft {
+            background: color-mix(in srgb, var(--card) 84%, var(--line) 16%);
         }
 
         .mono {
@@ -21,9 +25,14 @@
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas;
         }
 
-        .help {
-            color: var(--muted);
-            font-size: .85rem;
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            padding: .15rem .6rem;
+            border-radius: 999px;
+            font-size: .78rem;
+            border: 1px solid var(--line);
         }
 
         .badge-soft {
@@ -32,15 +41,102 @@
             font-size: .75rem;
         }
 
+        .section-title {
+            font-size: .88rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .field-label {
+            font-size: .8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .small-muted {
+            font-size: .8rem;
+            color: var(--muted);
+        }
+
+        .qc-table thead th {
+            font-size: .8rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
         @media (max-width: 767.98px) {
-            .table-wrap {
-                overflow-x: auto;
+
+            .page-wrap {
+                padding-inline: .35rem;
             }
 
-            table tbody tr td[data-label]::before {
-                content: attr(data-label) " ";
-                font-weight: 600;
+            .header-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.3fr);
+                gap: .5rem;
+            }
+
+            .table-wrap {
+                overflow: visible;
+            }
+
+            .qc-table-mobile {
+                border-collapse: separate;
+                border-spacing: 0 .5rem;
+            }
+
+            .qc-table-mobile thead {
+                display: none;
+            }
+
+            .qc-table-mobile tbody tr {
                 display: block;
+                background: var(--card);
+                border-radius: 14px;
+                border: 1px solid var(--line);
+                padding: .55rem .7rem .6rem;
+            }
+
+            .qc-table-mobile tbody tr td {
+                display: block;
+                border: 0;
+                padding: .15rem 0;
+            }
+
+            /* header kecil di dalam card: bundle no + code */
+            .qc-table-mobile tbody tr td.qc-card-header {
+                padding-bottom: .3rem;
+                margin-bottom: .2rem;
+                border-bottom: 1px dashed var(--line);
+            }
+
+            .qc-table-mobile tbody tr td[data-label]::before {
+                content: attr(data-label);
+                display: block;
+                font-size: .75rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                margin-bottom: .05rem;
+            }
+
+            .qc-table-mobile {
+                font-size: .85rem;
+            }
+
+            .qc-table-mobile input.form-control-sm {
+                font-size: .8rem;
+                padding-top: .15rem;
+                padding-bottom: .15rem;
+            }
+
+            .qc-summary-inline {
+                display: flex;
+                flex-wrap: wrap;
+                gap: .25rem .4rem;
+                font-size: .78rem;
             }
         }
     </style>
@@ -56,44 +152,73 @@
         $defaultOperatorLabel = $loginOperator
             ? ($loginOperator->code ?? 'OP') . ' — ' . ($loginOperator->name ?? 'Operator')
             : 'User login';
+
+        $statusClass =
+            [
+                'draft' => 'secondary',
+                'cut' => 'primary',
+                'qc_ok' => 'success',
+                'qc_mixed' => 'warning',
+                'qc_reject' => 'danger',
+                'sent_to_qc' => 'info',
+                'qc_done' => 'success',
+            ][$cuttingJob->status] ?? 'secondary';
     @endphp
 
     <div class="page-wrap">
 
-        {{-- HEADER JOB --}}
-        <div class="card p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-center gap-3">
+        {{-- =======================
+             HEADER JOB
+        ======================== --}}
+        <div class="card card-soft p-3 mb-3">
+            <div class="d-none d-md-flex justify-content-between align-items-center gap-3">
                 <div>
-                    <h1 class="h5 mb-1">QC Cutting: {{ $cuttingJob->code }}</h1>
-                    <div class="help">
-                        LOT: {{ $lot?->code ?? '-' }} •
-                        Item: {{ $lot?->item?->code ?? '-' }} •
-                        Gudang: {{ $warehouse?->code ?? '-' }}
+                    <div class="section-title mb-1">QC Cutting</div>
+                    <h1 class="h5 mb-1 mono">{{ $cuttingJob->code }}</h1>
+                    <div class="small-muted">
+                        LOT {{ $lot?->code ?? '-' }} • {{ $lot?->item?->code ?? '-' }} •
+                        Gudang {{ $warehouse?->code ?? '-' }}
                     </div>
                 </div>
 
-                @php
-                    $statusClass =
-                        [
-                            'draft' => 'secondary',
-                            'cut' => 'primary',
-                            'qc_ok' => 'success',
-                            'qc_mixed' => 'warning',
-                            'qc_reject' => 'danger',
-                            'sent_to_qc' => 'info',
-                            'qc_done' => 'success',
-                        ][$cuttingJob->status] ?? 'secondary';
-                @endphp
-
-                <div class="d-flex flex-column align-items-end">
-                    <span class="badge bg-{{ $statusClass }} px-3 py-2 mb-1">
+                <div class="d-flex flex-column align-items-end gap-2">
+                    <span class="badge bg-{{ $statusClass }} px-3 py-2">
                         {{ strtoupper($cuttingJob->status) }}
                     </span>
-                    <a href="{{ route('production.cutting_jobs.show', $cuttingJob) }}"
-                        class="btn btn-sm btn-outline-secondary">
-                        Kembali ke Cutting Job
-                    </a>
+
+                    <div class="d-flex gap-2">
+                        <a href="{{ route('production.cutting_jobs.show', $cuttingJob) }}"
+                            class="btn btn-sm btn-outline-secondary">
+                            Kembali
+                        </a>
+                    </div>
                 </div>
+            </div>
+
+            {{-- MOBILE HEADER --}}
+            <div class="d-block d-md-none">
+                <div class="header-grid align-items-start mb-2">
+                    <div>
+                        <div class="section-title mb-1">QC Cutting</div>
+                        <div class="fw-semibold mono">{{ $cuttingJob->code }}</div>
+                        <div class="small-muted mt-1">
+                            LOT {{ $lot?->code ?? '-' }} • {{ $lot?->item?->code ?? '-' }}
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-{{ $statusClass }} px-2 py-1 mb-2">
+                            {{ strtoupper($cuttingJob->status) }}
+                        </span>
+                        <div>
+                            <a href="{{ route('production.cutting_jobs.show', $cuttingJob) }}"
+                                class="btn btn-sm btn-outline-secondary">
+                                Kembali
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Ringkasan kecil (opsional) bisa diisi nanti dari controller --}}
             </div>
         </div>
 
@@ -101,13 +226,34 @@
             @csrf
             @method('PUT')
 
-            {{-- HEADER QC --}}
+            {{-- =======================
+                 HEADER QC
+            ======================== --}}
             <div class="card p-3 mb-3">
-                <h2 class="h6 mb-2">Header QC Cutting</h2>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="section-title mb-0">Header QC</div>
+
+                    <div class="d-none d-md-flex gap-2">
+                        <div class="pill">
+                            <span>Total OK</span>
+                            <span class="mono" id="sum-ok">0,00</span>
+                        </div>
+                        <div class="pill">
+                            <span>Reject</span>
+                            <span class="mono" id="sum-reject">0,00</span>
+                        </div>
+                    </div>
+
+                    {{-- Mobile summary inline --}}
+                    <div class="d-block d-md-none qc-summary-inline">
+                        <span>Total OK <span class="mono" id="sum-ok-mobile">0,00</span></span>
+                        <span>Reject <span class="mono" id="sum-reject-mobile">0,00</span></span>
+                    </div>
+                </div>
 
                 <div class="row g-3">
                     <div class="col-md-3 col-6">
-                        <label class="form-label">Tanggal QC</label>
+                        <label class="field-label mb-1">Tanggal QC</label>
                         <input type="date" name="qc_date" value="{{ old('qc_date', now()->toDateString()) }}"
                             class="form-control @error('qc_date') is-invalid @enderror">
                         @error('qc_date')
@@ -116,59 +262,49 @@
                     </div>
 
                     <div class="col-md-4 col-12">
-                        <label class="form-label">Operator QC</label>
+                        <label class="field-label mb-1">Operator QC</label>
 
                         {{-- hidden supaya operator_id tetap terkirim --}}
                         <input type="hidden" name="operator_id" value="{{ $defaultOperatorId }}">
 
-                        {{-- tampilan hanya-baca, di-disable --}}
+                        {{-- tampilan hanya-baca --}}
                         <input type="text" class="form-control @error('operator_id') is-invalid @enderror"
                             value="{{ $defaultOperatorLabel }}" disabled>
 
                         @error('operator_id')
                             <div class="invalid-feedback d-block">{{ $message }}</div>
                         @enderror
-
-                        <div class="help mt-1">
-                            Operator otomatis diisi user yang sedang login.
-                        </div>
                     </div>
 
                     <div class="col-12">
-                        <label class="form-label">Catatan Umum (opsional)</label>
-                        <textarea name="notes_global" rows="2" class="form-control">{{ old('notes_global') }}</textarea>
+                        <label class="field-label mb-1">Catatan Umum</label>
+                        <textarea name="notes_global" rows="2" class="form-control"
+                            placeholder="Opsional. Mis: hasil QC cutting lot ini secara umum.">{{ old('notes_global') }}</textarea>
                     </div>
                 </div>
             </div>
 
-            {{-- TABEL BUNDLES --}}
+            {{-- =======================
+                 TABEL / CARD BUNDLES
+            ======================== --}}
             <div class="card p-3 mb-4">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <div>
-                        <h2 class="h6 mb-0">QC per Bundle</h2>
-                        <div class="help">
-                            Input hanya <strong>Qty Reject</strong>. Qty OK otomatis dihitung = Qty Bundle − Qty Reject.
-                        </div>
-                    </div>
-
-                    <div class="help">
-                        Total OK: <span class="mono" id="sum-ok">0,00</span> •
-                        Total Reject: <span class="mono" id="sum-reject">0,00</span>
-                    </div>
+                    <div class="section-title mb-0">QC per Bundle</div>
+                    {{-- Untuk desktop summary sudah di header QC --}}
                 </div>
 
                 <div class="table-wrap">
-                    <table class="table table-sm align-middle mono">
+                    <table class="table table-sm align-middle mono qc-table qc-table-mobile">
                         <thead>
                             <tr>
-                                <th>Bundle</th>
+                                <th style="width:70px;">Bundle</th>
                                 <th>Item</th>
-                                <th class="text-end">Qty Bundle</th>
-                                <th class="text-end">Qty OK (auto)</th>
-                                <th class="text-end">Qty Reject</th>
-                                <th>Alasan Reject</th>
-                                <th>Status</th>
-                                <th>Catatan</th>
+                                <th class="text-end" style="width:120px;">Cutting</th>
+                                <th class="text-end" style="width:120px;">OK</th>
+                                <th class="text-end" style="width:120px;">Reject</th>
+                                <th style="width:180px;">Alasan</th>
+                                <th class="d-none d-md-table-cell" style="width:110px;">Status</th>
+                                <th class="d-none d-md-table-cell" style="width:160px;">Catatan</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -190,34 +326,39 @@
                                     <input type="hidden" name="results[{{ $i }}][cutting_job_bundle_id]"
                                         value="{{ $row['cutting_job_bundle_id'] }}">
 
-                                    {{-- hidden qty_ok (server tetap pakai field ini) --}}
+                                    {{-- hidden qty_ok --}}
                                     <input type="hidden" name="results[{{ $i }}][qty_ok]"
                                         class="input-ok-hidden" value="{{ old("results.$i.qty_ok", $qtyOk) }}">
 
-                                    <td data-label="Bundle">
-                                        <div class="fw-semibold">
-                                            {{ $row['bundle_code'] }}
+                                    {{-- Header card (mobile) / Bundle (desktop) --}}
+                                    <td class="qc-card-header" data-label="Bundle">
+                                        <div class="fw-semibold mono">
+                                            #{{ $row['bundle_no'] ?? '-' }}
                                         </div>
-                                        <div class="small text-muted">
-                                            No: {{ $row['bundle_no'] }}
+                                        <div class="small-muted mono">
+                                            {{ $row['bundle_code'] ?? '' }}
                                         </div>
                                     </td>
 
+                                    {{-- Item --}}
                                     <td data-label="Item">
-                                        <span>{{ $row['item_code'] }}</span>
+                                        <div>{{ $row['item_code'] }}</div>
                                     </td>
 
-                                    <td data-label="Qty Bundle" class="text-end">
+                                    {{-- Cutting --}}
+                                    <td data-label="Cutting" class="text-end">
                                         {{ number_format($qtyBundle, 2, ',', '.') }}
                                     </td>
 
-                                    <td data-label="Qty OK (auto)" class="text-end">
+                                    {{-- OK (auto) --}}
+                                    <td data-label="OK" class="text-end">
                                         <span class="cell-ok">
                                             {{ number_format(old("results.$i.qty_ok", $qtyOk), 2, ',', '.') }}
                                         </span>
                                     </td>
 
-                                    <td data-label="Qty Reject" class="text-end">
+                                    {{-- Reject input --}}
+                                    <td data-label="Reject" class="text-end">
                                         <input type="number" step="1" min="0" inputmode="numeric"
                                             pattern="\d*" name="results[{{ $i }}][qty_reject]"
                                             class="form-control form-control-sm text-end input-reject @error("results.$i.qty_reject") is-invalid @enderror"
@@ -228,17 +369,19 @@
                                         @enderror
                                     </td>
 
-                                    <td data-label="Alasan Reject" style="min-width: 140px;">
+                                    {{-- Alasan Reject --}}
+                                    <td data-label="Alasan">
                                         <input type="text" name="results[{{ $i }}][reject_reason]"
                                             class="form-control form-control-sm @error("results.$i.reject_reason") is-invalid @enderror"
                                             value="{{ old("results.$i.reject_reason", $row['reject_reason'] ?? '') }}"
-                                            placeholder="mis: bolong / kotor">
+                                            placeholder="mis: bolong, kotor">
                                         @error("results.$i.reject_reason")
                                             <div class="invalid-feedback">{{ $message }}</div>
                                         @enderror
                                     </td>
 
-                                    <td data-label="Status">
+                                    {{-- Status (desktop saja) --}}
+                                    <td data-label="Status" class="d-none d-md-table-cell">
                                         @php
                                             $st = $row['status'] ?: 'cut';
                                             $cls =
@@ -254,7 +397,8 @@
                                         </span>
                                     </td>
 
-                                    <td data-label="Catatan" style="min-width: 160px;">
+                                    {{-- Catatan (desktop saja) --}}
+                                    <td data-label="Catatan" class="d-none d-md-table-cell">
                                         <input type="text" name="results[{{ $i }}][notes]"
                                             class="form-control form-control-sm @error("results.$i.notes") is-invalid @enderror"
                                             value="{{ old("results.$i.notes", $row['notes'] ?? '') }}">
@@ -269,14 +413,17 @@
                 </div>
 
                 @error('results')
-                    <div class="text-danger small mt-1">{{ $message }}</div>
+                    <div class="text-danger small mt-2">{{ $message }}</div>
                 @enderror
 
                 <div id="qc-warning" class="text-danger small mt-2" style="display:none;">
-                    ⚠️ Ada baris di mana Qty Reject melebihi Qty Bundle. Nilai dikunci ke batas maksimum.
+                    ⚠️ Qty Reject tidak boleh melebihi Qty Cutting. Nilai otomatis dikunci ke batas maksimum.
                 </div>
             </div>
 
+            {{-- =======================
+                 ACTION BUTTON
+            ======================== --}}
             <div class="d-flex justify-content-end mb-5 gap-2">
                 <a href="{{ route('production.cutting_jobs.show', $cuttingJob) }}" class="btn btn-outline-secondary">
                     Batal
@@ -294,6 +441,11 @@
         const inputsReject = document.querySelectorAll('.input-reject');
         const sumOkSpan = document.getElementById('sum-ok');
         const sumRejectSpan = document.getElementById('sum-reject');
+
+        // mirror ke mobile summary
+        const sumOkMobileSpan = document.getElementById('sum-ok-mobile');
+        const sumRejectMobileSpan = document.getElementById('sum-reject-mobile');
+
         const warningEl = document.getElementById('qc-warning');
 
         function attachSelectAllOnFocus(input) {
@@ -341,12 +493,14 @@
                 totalReject += rej;
             });
 
-            if (sumOkSpan) {
-                sumOkSpan.textContent = totalOk.toFixed(2).replace('.', ',');
-            }
-            if (sumRejectSpan) {
-                sumRejectSpan.textContent = totalReject.toFixed(2).replace('.', ',');
-            }
+            const okText = totalOk.toFixed(2).replace('.', ',');
+            const rejText = totalReject.toFixed(2).replace('.', ',');
+
+            if (sumOkSpan) sumOkSpan.textContent = okText;
+            if (sumRejectSpan) sumRejectSpan.textContent = rejText;
+
+            if (sumOkMobileSpan) sumOkMobileSpan.textContent = okText;
+            if (sumRejectMobileSpan) sumRejectMobileSpan.textContent = rejText;
 
             if (warningEl) {
                 warningEl.style.display = anyOver ? 'block' : 'none';
@@ -358,6 +512,7 @@
             i.addEventListener('input', recalcTotals);
         });
 
+        // inisialisasi awal
         recalcTotals();
     </script>
 @endpush

@@ -26,6 +26,11 @@
             <p class="text-muted">Contoh semua komponen di satu halaman.</p>
         </div>
 
+        <div>
+            <h5>Belajar Komponen Blade di Laravel</h1>
+
+                <x-alert message="Ini halaman home" type="danger" />
+        </div>
         {{-- ============================
          BUTTON SECTION
     ============================= --}}

@@ -42,6 +42,8 @@
 
     {{-- THEME + GLOBAL STYLES ASLI MU --}}
     @include('layouts.partials.styles')
+    <link rel="stylesheet" href="{{ asset('css/light-minimal.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/dark-high-contrast.css') }}"> <!-- override dark -->
 
     {{-- ✅ Tambahan: ganjel konten di atas bottom nav khusus mobile --}}
     <style>

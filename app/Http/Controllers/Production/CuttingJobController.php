@@ -169,26 +169,24 @@ class CuttingJobController extends Controller
      */
     public function edit(CuttingJob $cuttingJob)
     {
-        // 1️⃣ Preload relasi yang dibutuhkan oleh form
+        // 1️⃣ Preload relasi yang dibutuhkan
         $cuttingJob->load([
             'warehouse',
             'lot.item',
             'bundles.finishedItem',
+            'bundles.operator',
         ]);
 
         $lot = $cuttingJob->lot;
         $warehouse = $cuttingJob->warehouse;
 
-        // 2️⃣ lotBalance di tampilan:
-        //    Untuk saat ini kamu jadikan "total pemakaian kain" sebagai info saja.
-        //    Nanti kalau mau, bisa diganti jadi saldo aktual LOT via InventoryService.
+        // 2️⃣ lotBalance di tampilan (sementara = total pemakaian kain)
         $lotBalance = $cuttingJob->bundles->sum('qty_used_fabric');
 
-        // 3️⃣ Master data item jadi dan operator cutting
+        // 3️⃣ Master data item jadi & operator cutting
         $items = Item::query()
-            ->select('id', 'code', 'item_category_id')
+            ->select('id', 'code', 'name')
             ->where('type', 'finished_good')
-            ->with(['category:id,code,name'])
             ->orderBy('code')
             ->get();
 
@@ -198,35 +196,33 @@ class CuttingJobController extends Controller
             ->orderBy('code')
             ->get();
 
-        // 4️⃣ Siapkan rows bundle untuk _form:
-        //     - jika ada old('bundles') → pakai itu (setelah validasi gagal)
-        //     - kalau tidak, generate dari bundles yang sudah ada di DB
+        // 4️⃣ Siapkan rows bundle untuk form:
+        //    - Kalau ada old('bundles') → pakai itu
+        //    - Kalau tidak → generate dari bundles existing
         $oldBundles = old('bundles');
         $rows = [];
 
         if ($oldBundles) {
-            // Case: user submit tapi gagal validasi → jangan hilangkan isian mereka
             $rows = $oldBundles;
         } else {
-            // Generate rows dari bundle existing di DB
             foreach ($cuttingJob->bundles as $b) {
                 $rows[] = [
-                    'id' => $b->id, // perlu id untuk update / delete di controller store/update
+                    'id' => $b->id,
                     'bundle_no' => $b->bundle_no,
                     'finished_item_id' => $b->finished_item_id,
                     'qty_pcs' => $b->qty_pcs,
                     'qty_used_fabric' => $b->qty_used_fabric,
-                    'item_category' => '', // placeholder, nanti bisa diisi kalau ada kolom kategori spesifik per bundle
+                    'item_category' => $b->item_category ?? '', // kalau nanti kamu butuh
                     'notes' => $b->notes,
                 ];
             }
 
-            // Kalau belum ada satupun bundle, tetap sediakan 1 baris kosong supaya form tidak kosong total
             if (empty($rows)) {
+                // minimal 1 baris supaya form tidak kosong
                 $rows[] = [
                     'bundle_no' => 1,
-                    'finished_item_id' => '',
-                    'qty_pcs' => '',
+                    'finished_item_id' => null,
+                    'qty_pcs' => null,
                     'qty_used_fabric' => 0,
                     'item_category' => '',
                     'notes' => '',
@@ -234,10 +230,7 @@ class CuttingJobController extends Controller
             }
         }
 
-        // 5️⃣ Kirim ke view edit
-        //    Di edit.blade.php biasanya kamu cuma @include('..._form') dengan mode = edit
         return view('production.cutting_jobs.edit', [
-            'mode' => 'edit',
             'job' => $cuttingJob,
             'lot' => $lot,
             'warehouse' => $warehouse,
@@ -253,34 +246,28 @@ class CuttingJobController extends Controller
      */
     public function store(Request $request)
     {
+
         $validated = $request->validate([
             'date' => ['required', 'date'],
             'warehouse_id' => ['required', 'exists:warehouses,id'],
-            'lot_id' => ['required', 'exists:lots,id'],
-            'fabric_item_id' => ['required', 'integer', 'exists:items,id'],
             'lot_id' => ['required', 'integer', 'exists:lots,id'],
+            'fabric_item_id' => ['required', 'integer', 'exists:items,id'],
 
-            // Wajib pilih operator
             'operator_id' => ['required', 'exists:employees,id'],
-
             'notes' => ['nullable', 'string'],
 
             'bundles' => ['required', 'array', 'min:1'],
-            'bundles.*.id' => ['nullable', 'integer'], // di create selalu null
+            'bundles.*.id' => ['nullable', 'integer'],
             'bundles.*.bundle_no' => ['nullable', 'integer'],
             'bundles.*.finished_item_id' => ['required', 'exists:items,id'],
+            'bundles.*.item_category_id' => ['nullable', 'integer', 'exists:item_categories,id'], // ⬅️ ganti dari item_category string
             'bundles.*.qty_pcs' => ['required', 'numeric', 'min:0.01'],
             'bundles.*.qty_used_fabric' => ['nullable', 'numeric', 'min:0'],
-            'bundles.*.item_category' => ['nullable', 'string'],
             'bundles.*.notes' => ['nullable', 'string'],
         ], [
-            'lot_id.required' => 'Silakan pilih LOT kain dulu.',
-            'operator_id.required' => 'Silakan pilih operator cutting.',
-            'bundles.required' => 'Minimal 1 baris output harus diisi.',
             'bundles.*.finished_item_id.required' => 'Item jadi pada setiap baris wajib diisi.',
             'bundles.*.qty_pcs.required' => 'Qty pcs pada setiap baris wajib diisi.',
         ]);
-
         // Hitung qty_used_fabric per baris di server
         $lotBalance = (float) ($request->input('lot_balance') ?? 0);
         $bundles = $validated['bundles'];
@@ -310,7 +297,6 @@ class CuttingJobController extends Controller
         }
 
         $job = $this->cutting->create($validated);
-
         return redirect()
             ->route('production.cutting_jobs.show', $job)
             ->with('success', 'Cutting job berhasil dibuat.');

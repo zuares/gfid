@@ -11,6 +11,7 @@ class SewingPickupLine extends Model
         'sewing_pickup_id',
         'cutting_job_bundle_id',
         'finished_item_id',
+        'operator_id',
         'qty_bundle',
         'qty_returned_ok',
         'qty_returned_reject',
@@ -32,6 +33,11 @@ class SewingPickupLine extends Model
     public function finishedItem()
     {
         return $this->belongsTo(Item::class, 'finished_item_id');
+    }
+
+    public function operator()
+    {
+        return $this->belongsTo(Employee::class, 'operator_id');
     }
 
 }

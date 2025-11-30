@@ -13,6 +13,7 @@ class CuttingJobBundle extends Model
         'bundle_no',
         'lot_id',
         'finished_item_id',
+        'item_category_id', // ⬅️ TAMBAH INI
         'qty_pcs',
         'qty_used_fabric',
         'operator_id',

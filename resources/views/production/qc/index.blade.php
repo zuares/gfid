@@ -40,6 +40,39 @@
             padding: .17rem .5rem;
             font-size: .7rem;
         }
+
+        /* ============================
+               MOBILE: QC CUTTING LIST
+            ============================ */
+        @media (max-width: 767.98px) {
+            .qc-mobile-table {
+                font-size: .85rem;
+            }
+
+            .qc-mobile-table thead th {
+                border-bottom-width: 1px;
+                white-space: nowrap;
+            }
+
+            .qc-mobile-row {
+                cursor: pointer;
+            }
+
+            .qc-mobile-row:hover {
+                background: color-mix(in srgb, var(--card) 94%, var(--line) 6%);
+            }
+
+            .qc-mobile-row .status-pill {
+                font-size: .7rem;
+                border-radius: 999px;
+                padding: .12rem .5rem;
+            }
+
+            .qc-mobile-secondary {
+                font-size: .75rem;
+                color: var(--muted);
+            }
+        }
     </style>
 @endpush
 
@@ -89,7 +122,8 @@
             @if ($stage === 'cutting')
                 <h2 class="h6 mb-2">Daftar QC Cutting</h2>
 
-                <div class="table-wrap">
+                {{-- DESKTOP VERSION (LENGKAP) --}}
+                <div class="table-wrap d-none d-md-block">
                     <table class="table table-sm align-middle mono">
                         <thead>
                             <tr>
@@ -109,7 +143,6 @@
 
                                     $rawStatus = $job->status ?? '-';
 
-                                    // mapping status CuttingJob versi terbaru
                                     $map = [
                                         'draft' => ['DRAFT', 'secondary'],
                                         'cut' => ['CUT', 'primary'],
@@ -127,7 +160,6 @@
                                     <td>{{ $loop->iteration + ($records->currentPage() - 1) * $records->perPage() }}</td>
                                     <td>{{ $job->date?->format('Y-m-d') ?? $job->date }}</td>
                                     <td>
-                                        {{-- Nama item Lot + badge kecil kode LOT --}}
                                         {{ $job->lot?->item?->code ?? '-' }}
                                         @if ($job->lot)
                                             <span class="badge-soft bg-light border text-muted">
@@ -154,6 +186,65 @@
                             @empty
                                 <tr>
                                     <td colspan="6" class="text-center text-muted small">
+                                        Belum ada data QC Cutting.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                {{-- MOBILE VERSION (CLEAN) --}}
+                <div class="table-wrap d-block d-md-none">
+                    <table class="table table-sm align-middle mono qc-mobile-table">
+                        <thead>
+                            <tr>
+                                <th style="width:40px;">#</th>
+                                <th>Tanggal Cutting</th>
+                                <th style="width:90px;">Jumlah Iket</th>
+                                <th style="width:80px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($records as $job)
+                                @php
+                                    $totalBundles = $job->bundles->count();
+
+                                    $rawStatus = $job->status ?? '-';
+
+                                    $map = [
+                                        'draft' => ['Draft', 'secondary'],
+                                        'cut' => ['Cut', 'primary'],
+                                        'sent_to_qc' => ['Belum QC', 'warning'],
+                                        'qc_done' => ['QC Done', 'success'],
+                                        'qc_ok' => ['QC OK', 'success'],
+                                        'qc_mixed' => ['QC Mixed', 'warning'],
+                                        'qc_reject' => ['QC Reject', 'danger'],
+                                    ];
+
+                                    $cfg = $map[$rawStatus] ?? [ucfirst($rawStatus), 'secondary'];
+                                    [$statusLabel, $statusClass] = $cfg;
+                                @endphp
+
+                                <tr class="qc-mobile-row" data-href="{{ route('production.qc.cutting.edit', $job) }}">
+                                    <td>{{ $loop->iteration + ($records->currentPage() - 1) * $records->perPage() }}</td>
+                                    <td>
+                                        {{ $job->date?->format('Y-m-d') ?? $job->date }}
+                                        <div class="qc-mobile-secondary">
+                                            {{-- info kecil tambahan: kode LOT --}}
+                                            Lot: {{ $job->lot?->code ?? '-' }}
+                                        </div>
+                                    </td>
+                                    <td>{{ $totalBundles }} iket</td>
+                                    <td>
+                                        <span class="badge bg-{{ $statusClass }} status-pill">
+                                            {{ $statusLabel }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted small">
                                         Belum ada data QC Cutting.
                                     </td>
                                 </tr>
@@ -284,3 +375,20 @@
 
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        // MOBILE: Klik baris → masuk ke halaman input QC Cutting
+        document.addEventListener('DOMContentLoaded', function() {
+            const rows = document.querySelectorAll('.qc-mobile-row');
+            rows.forEach(row => {
+                row.addEventListener('click', function() {
+                    const href = this.getAttribute('data-href');
+                    if (href) {
+                        window.location.href = href;
+                    }
+                });
+            });
+        });
+    </script>
+@endpush

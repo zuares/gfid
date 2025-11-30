@@ -1,0 +1,147 @@
+/* =====================================================
+   LIGHT MODE — BUTTON MINIMAL FLAT OVERRIDE
+   Replace ALL Bootstrap button colors
+   ===================================================== */
+
+[data-theme="light"] .btn {
+    border-radius: 8px;
+    font-weight: 500;
+    box-shadow: none !important;
+    transition: background .18s ease, filter .18s ease, border-color .18s ease;
+}
+
+/* ============================
+   PRIMARY — CYAN MINIMAL
+=============================== */
+[data-theme="light"] .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+}
+
+[data-theme="light"] .btn-primary:hover {
+    background: color-mix(in srgb, var(--accent) 88%, #ffffff 12%);
+}
+
+[data-theme="light"] .btn-primary:active {
+    filter: brightness(0.95);
+}
+
+/* Soft primary */
+[data-theme="light"] .btn-soft,
+[data-theme="light"] .btn-soft-primary {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid rgba(34, 193, 195, 0.28);
+}
+
+[data-theme="light"] .btn-soft:hover,
+[data-theme="light"] .btn-soft-primary:hover {
+    background: color-mix(in srgb, var(--accent-soft) 65%, var(--accent) 35%);
+}
+
+/* Outline primary */
+[data-theme="light"] .btn-outline-primary {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    background: transparent;
+}
+
+[data-theme="light"] .btn-outline-primary:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+/* ============================
+   SUCCESS (Soft Minimal Green)
+=============================== */
+[data-theme="light"] .btn-success {
+    background: #16a34a; /* green-600 */
+    border-color: #16a34a;
+    color: #fff;
+}
+
+[data-theme="light"] .btn-success:hover {
+    background: #22c55e; /* green-500 */
+}
+
+/* Soft success */
+[data-theme="light"] .btn-soft-success {
+    background: var(--success-soft);
+    color: var(--success);
+    border: 1px solid rgba(22, 163, 74, 0.25);
+}
+
+[data-theme="light"] .btn-soft-success:hover {
+    background: rgba(22, 163, 74, 0.18);
+}
+
+/* ============================
+   DANGER (Soft Minimal Red)
+=============================== */
+[data-theme="light"] .btn-danger {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+}
+
+[data-theme="light"] .btn-danger:hover {
+    background: #ef5555;
+}
+
+/* Soft danger */
+[data-theme="light"] .btn-soft-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+[data-theme="light"] .btn-soft-danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+/* ============================
+   SECONDARY (Neutral Minimal)
+=============================== */
+[data-theme="light"] .btn-secondary {
+    background: var(--card-soft);
+    border: 1px solid var(--line);
+    color: var(--text);
+}
+
+[data-theme="light"] .btn-secondary:hover {
+    background: var(--bg-soft);
+}
+
+/* ============================
+   LINK BUTTON
+=============================== */
+[data-theme="light"] .btn-link {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+[data-theme="light"] .btn-link:hover {
+    opacity: .85;
+}
+
+
+
+
+/* ============================
+   DISABLED STATE
+=============================== */
+[data-theme="light"] .btn:disabled,
+[data-theme="light"] .btn.disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+[data-theme="light"] {
+    /* ... var lain ... */
+
+    /* ICON CENTER (Light) */
+    --icon-center-bg: #0f5054;      /* background bulat lembut */
+    --icon-center-border: #2c8bbe;  /* border sangat halus */
+    --icon-center-fg: #0f172a;      /* warna icon (gelap tapi enak dibaca) */
+}

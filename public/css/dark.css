@@ -1,0 +1,114 @@
+/* =====================================================
+   DARK MODE — AMOLED PURE BLACK
+   Full black (#000), neon accent, high readability
+   ===================================================== */
+
+[data-theme="dark"] {
+    /* BACKGROUND */
+    --bg: #000000;               /* Pure black */
+    --bg-soft: #050505;          /* Slightly raised black */
+    --card: #0a0a0a;             /* Subtle card elevation */
+    --card-soft: #0d0d0d;
+    --sidebar: #000000;
+
+    /* TEXT */
+    --text: #ffffff;             /* Full white */
+    --muted: #d1d5db;            /* Soft light grey */
+
+    /* BORDER / LINE */
+    --line: #1f2937;             /* Very dark navy-grey */
+    --muted-rgb: 209, 213, 219;
+    --line-rgb: 31, 41, 55;
+    --sidebar-rgb: 0, 0, 0;
+
+    /* ACCENT NEON */
+    --accent: #3b82f6;           /* Neon blue */
+    --accent-soft: #1e40af;      /* Deep navy-blue glow */
+    --primary: var(--accent);
+    --primary-soft: rgba(59, 130, 246, 0.15);
+
+    /* FEEDBACK COLORS */
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.12);
+    --success: #4ade80;
+    --success-soft: rgba(74, 222, 128, 0.12);
+
+    /* ITEM SUGGEST COMPONENT */
+    --item-suggest-bg: #b8aeae;
+    --item-suggest-border: #1f2937;
+    --item-suggest-text: #e6dddd;
+    --item-suggest-muted: #9ca3af;
+    --item-suggest-hover-bg: rgba(59, 130, 246, 0.18);
+    --item-suggest-error: #fca5a5;
+}
+
+/* =====================================================
+   UI ENHANCEMENTS AMOLED
+   ===================================================== */
+
+/* CARD SHADOW (soft neon glow) */
+[data-theme="dark"] .card {
+    box-shadow:
+        0 0 20px rgba(59, 130, 246, 0.06),
+        0 0 2px rgba(255, 255, 255, 0.05);
+}
+
+/* TABLE HEADER */
+[data-theme="dark"] .table thead th {
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+/* FORM FIELD */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select {
+    background: #0d0d0d;
+    border-color: #1f2937;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+}
+
+[data-theme="dark"] .form-control::placeholder {
+    color: #6b7280;
+}
+
+/* BUTTONS */
+[data-theme="dark"] .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.35);
+}
+
+[data-theme="dark"] .btn-soft {
+    background: rgba(59, 130, 246, 0.20);
+    color: #3b82f6;
+}
+
+/* SIDEBAR */
+[data-theme="dark"] .sidebar {
+    background: #000000;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* NAVBAR */
+[data-theme="dark"] .navbar {
+    background: #050505 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* TABLE ROW HOVER */
+[data-theme="dark"] .table tbody tr:hover {
+    background-color: rgba(248, 240, 240, 0.04);
+}
+
+[data-theme="dark"] .item-suggest-option-code {
+    color: #ffffff !important; /* putih cerah */
+}
+
+
+

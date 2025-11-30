@@ -76,32 +76,49 @@
     }
 
     [data-theme="dark"] {
-        --bg: var(--bg-dark);
-        --bg-soft: var(--bg-soft-dark);
-        --card: var(--card-dark);
-        --card-soft: var(--card-soft-dark);
-        --sidebar: var(--sidebar-dark);
+        --bg: #0a1a2b;
+        /* Navy dark, bukan hitam */
+        --bg-soft: #0f2238;
+        /* Biru tua lembut */
+        --card: #11263f;
+        /* Card jelas kontras */
+        --card-soft: #132a45;
+        --sidebar: #0f2238;
 
-        --text: var(--text-dark);
-        --muted: var(--muted-dark);
-        --line: var(--line-dark);
+        --text: #f8fafc;
+        /* SUPER PUTIH */
+        --muted: #cbd5e1;
+        /* Slate-200 */
+        --line: #1e3a5f;
+        /* Border biru tua tapi kelihatan */
 
-        --accent: var(--accent-dark);
-        --accent-soft: var(--accent-soft-dark);
+        --accent: #60a5fa;
+        /* Biru terang */
+        --accent-soft: #1e40af;
+        /* Soft terang, bukan abu */
 
-        --danger: var(--danger-dark);
-        --danger-soft: var(--danger-soft-dark);
+        --danger: #fb7185;
+        --danger-soft: #4c0519;
 
-        --success: var(--success-dark);
-        --success-soft: var(--success-soft-dark);
+        --success: #4ade80;
+        --success-soft: #064e3b;
 
-        --primary: var(--accent-dark);
-        --primary-soft: var(--accent-soft-dark);
+        --primary: var(--accent);
+        --primary-soft: var(--accent-soft);
 
-        --muted-rgb: 156, 163, 175;
-        --line-rgb: 31, 41, 55;
-        --sidebar-rgb: 2, 8, 23;
+        --muted-rgb: 203, 213, 225;
+        --line-rgb: 30, 58, 95;
+        --sidebar-rgb: 15, 34, 56;
+
+        /* ITEM SUGGEST DARK FIX */
+        --item-suggest-bg: #0f2238;
+        --item-suggest-border: #1e3a5f;
+        --item-suggest-text: #f8fafc;
+        --item-suggest-muted: #94a3b8;
+        --item-suggest-hover-bg: rgba(96, 165, 250, 0.20);
+        --item-suggest-error: #fca5a5;
     }
+
 
     /* ========= GLOBAL ========= */
     html,
@@ -166,6 +183,11 @@
         color: var(--muted);
         font-size: .85rem;
     }
+
+    main {
+        overscroll-behavior: none;
+    }
+
 
     .page-wrap {
         max-width: 1080px;
@@ -339,6 +361,7 @@
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 14px;
         line-height: 1.4;
+        overscroll-behavior-y: contain;
     }
 
     /* Biar konten nggak nempel ke pinggir di hp kecil */

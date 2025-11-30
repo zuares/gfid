@@ -10,6 +10,8 @@ use App\Models\FinishingJob;
 use App\Models\FinishingJobLine;
 use App\Models\InventoryMutation;
 use App\Models\Item;
+use App\Models\SewingPickupLine;
+use App\Models\SewingReturnLine;
 use App\Models\Warehouse;
 use App\Services\Inventory\InventoryService;
 use Carbon\Carbon;
@@ -86,18 +88,17 @@ class FinishingJobController extends Controller
             ->first();
 
         if (!$wipFinWarehouse) {
-            $bundles = collect();
-            $totalBundles = 0;
-            $totalWipQty = 0;
-
-            return view('production.finishing_jobs.bundles_ready', compact(
-                'bundles',
-                'totalBundles',
-                'totalWipQty',
-                'wipFinWarehouse'
-            ));
+            return view('production.finishing_jobs.bundles_ready', [
+                'bundles' => collect(),
+                'totalBundles' => 0,
+                'totalWipQty' => 0,
+                'wipFinWarehouse' => null,
+            ]);
         }
 
+        // ==========================
+        //  QUERY BUNDLE WIP-FIN
+        // ==========================
         $query = CuttingJobBundle::query()
             ->with([
                 'cuttingJob',
@@ -108,26 +109,23 @@ class FinishingJobController extends Controller
             ->where('wip_warehouse_id', $wipFinWarehouse->id)
             ->where('wip_qty', '>', 0.0001);
 
-        // Filter item_id via lot.item
+        // =============== FILTER ==================
         if ($itemId = $request->input('item_id')) {
             $query->whereHas('lot', function ($q) use ($itemId) {
                 $q->where('item_id', $itemId);
             });
         }
 
-        // Filter warna
         if ($color = $request->input('color')) {
             $query->whereHas('lot.item', function ($q) use ($color) {
-                $q->where('color', 'like', '%' . $color . '%');
+                $q->where('color', 'like', "%{$color}%");
             });
         }
 
-        // Filter kode bundle
         if ($bundleCode = $request->input('bundle_code')) {
-            $query->where('bundle_code', 'like', '%' . $bundleCode . '%');
+            $query->where('bundle_code', 'like', "%{$bundleCode}%");
         }
 
-        // Search umum
         if ($q = $request->input('q')) {
             $q = trim($q);
             $query->where(function ($sub) use ($q) {
@@ -142,18 +140,58 @@ class FinishingJobController extends Controller
             });
         }
 
-        // Summary
+        // =============== SUMMARY ==================
         $summaryQuery = clone $query;
         $totalBundles = (clone $summaryQuery)->count();
         $totalWipQty = (clone $summaryQuery)->sum('wip_qty');
 
-        // Data
+        // =============== DATA ==================
         $bundles = $query
             ->orderBy('cutting_job_id')
             ->orderBy('bundle_no')
             ->orderByDesc('id')
             ->paginate(20)
             ->withQueryString();
+
+        // ==============================================================
+        //  ENRICH DATA: CARI SIAPA YANG TERAKHIR SETOR (operator + tanggal)
+        // ==============================================================
+
+        // Ambil semua bundle_id yang muncul dalam halaman ini
+        $bundleIds = $bundles->pluck('id')->all();
+
+        // Ambil LAST return line per bundle
+        $lastReturns = SewingReturnLine::query()
+            ->whereIn('sewing_pickup_line_id', function ($q) use ($bundleIds) {
+                $q->select('id')
+                    ->from('sewing_pickup_lines')
+                    ->whereIn('cutting_job_bundle_id', $bundleIds);
+            })
+            ->with([
+                'sewingPickupLine.sewingPickup.operator',
+                'sewingReturn',
+            ])
+            ->get()
+            ->groupBy(function ($r) {
+                return $r->sewingPickupLine->cutting_job_bundle_id ?? null;
+            });
+
+        // Inject ke setiap bundle
+        foreach ($bundles as $bundle) {
+            $last = optional($lastReturns[$bundle->id] ?? collect())->sortByDesc('id')->first();
+
+            if ($last) {
+                $operator = optional($last->sewingPickupLine?->sewingPickup?->operator);
+
+                $bundle->last_return_operator_name = $operator?->name;
+                $bundle->last_return_operator_code = $operator?->code;
+                $bundle->last_return_date = optional($last->sewingReturn?->date)?->format('Y-m-d');
+            } else {
+                $bundle->last_return_operator_name = null;
+                $bundle->last_return_operator_code = null;
+                $bundle->last_return_date = null;
+            }
+        }
 
         return view('production.finishing_jobs.bundles_ready', compact(
             'bundles',
@@ -163,51 +201,63 @@ class FinishingJobController extends Controller
         ));
     }
 
-    /* ============================
-     * CREATE
-     * ============================ */
-
     public function create(Request $request): View
     {
         $date = Carbon::today()->toDateString();
 
-        // Operator list (untuk dropdown di baris detail)
-        $operators = Employee::query()
-            ->orderBy('name')
-            ->get();
-
-        // Bundles dengan saldo WIP-FIN
+        // Gudang WIP-FIN
         $wipFinWarehouseId = Warehouse::where('code', 'WIP-FIN')->value('id');
 
-        $bundlesQuery = CuttingJobBundle::query()
-            ->with(['cuttingJob', 'lot.item', 'finishedItem'])
-            ->when($wipFinWarehouseId, function ($q) use ($wipFinWarehouseId) {
-                $q->where('wip_warehouse_id', $wipFinWarehouseId);
-            })
-            ->where('wip_qty', '>', 0.0001)
+        // Bundles di WIP-FIN
+        $bundles = CuttingJobBundle::query()
+            ->with(['lot.item', 'finishedItem'])
+            ->readyForFinishing($wipFinWarehouseId) // kamu sudah punya scope ini
             ->orderBy('cutting_job_id')
-            ->orderBy('bundle_no');
+            ->orderBy('bundle_no')
+            ->get();
 
-        $bundles = $bundlesQuery->get();
-
-        // bundle_ids[] dari halaman bundles_ready (kalau user pilih dari sana)
+        // bundle_ids[] dari halaman bundles_ready
         $bundleIds = (array) $request->input('bundle_ids', []);
 
         $lines = [];
 
         if (!empty($bundleIds)) {
-            $initialBundles = $bundles->whereIn('id', $bundleIds);
+            $selectedBundles = $bundles->whereIn('id', $bundleIds)->values();
 
-            foreach ($initialBundles as $bundle) {
+            foreach ($selectedBundles as $bundle) {
+                // 1️⃣ Coba cari Sewing Return terakhir untuk bundle ini
+                $lastReturn = SewingReturnLine::query()
+                    ->whereHas('pickupLine', function ($q) use ($bundle) {
+                        $q->where('cutting_job_bundle_id', $bundle->id);
+                    })
+                    ->with('pickupLine.sewingPickup.operator')
+                    ->orderByDesc('created_at')
+                    ->first();
+
+                $operatorName = optional(
+                    optional($lastReturn)->pickupLine?->sewingPickup?->operator
+                )->name;
+
+                // 2️⃣ Fallback: kalau belum ada return, atau operator masih null → pakai Sewing Pickup terakhir
+                if (!$operatorName) {
+                    $lastPickup = SewingPickupLine::query()
+                        ->where('cutting_job_bundle_id', $bundle->id)
+                        ->with('sewingPickup.operator')
+                        ->orderByDesc('created_at')
+                        ->first();
+
+                    $operatorName = optional(
+                        optional($lastPickup)->sewingPickup?->operator
+                    )->name;
+                }
+
+                // Item label & code (buat visual hierarchy di Blade)
                 $itemModel = $bundle->finishedItem ?? $bundle->lot?->item;
-                $itemId = $bundle->finished_item_id ?? $bundle->lot?->item_id ?? null;
+                $itemId = $itemModel?->id;
+                $itemCode = $itemModel?->code;
 
                 $itemLabel = $itemModel
-                ? trim(
-                    ($itemModel->code ?? '') . ' — ' .
-                    ($itemModel->name ?? '') . ' ' .
-                    ($itemModel->color ?? '')
-                )
+                ? trim(($itemModel->code ?? '') . ' — ' . ($itemModel->name ?? '') . ' ' . ($itemModel->color ?? ''))
                 : '';
 
                 $wipQty = (float) ($bundle->wip_qty ?? 0);
@@ -215,25 +265,26 @@ class FinishingJobController extends Controller
                 $lines[] = [
                     'bundle_id' => $bundle->id,
                     'item_id' => $itemId,
+                    'item_code' => $itemCode,
                     'item_label' => $itemLabel,
                     'wip_balance' => $wipQty,
-                    // qty_in & qty_ok nanti dihitung di Blade/JS sebagai wip_balance & wip_balance - reject
+
                     'qty_reject' => 0,
-                    'operator_id' => null,
                     'reject_reason' => null,
                     'reject_notes' => null,
+
+                    // ➜ inilah yang dibaca Blade kamu
+                    'sewing_operator_name' => $operatorName,
                 ];
             }
         }
 
         return view('production.finishing_jobs.create', compact(
             'date',
-            'operators',
             'bundles',
             'lines',
         ));
     }
-
     /* ============================
      * STORE (DRAFT)
      * ============================ */

@@ -184,7 +184,7 @@
                     <button type="submit" class="btn btn-sm btn-primary flex-grow-1">
                         Terapkan Filter
                     </button>
-                    <a href="{{ route('production.reports.sewing.dashboard') }}" class="btn btn-sm btn-outline-secondary">
+                    <a href="{{ route('production.reports.dashboard') }}" class="btn btn-sm btn-outline-secondary">
                         Reset
                     </a>
                 </div>
