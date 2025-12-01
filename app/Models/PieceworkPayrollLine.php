@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\ItemCategory;
 use Illuminate\Database\Eloquent\Model;
 
 class PieceworkPayrollLine extends Model
@@ -44,5 +45,10 @@ class PieceworkPayrollLine extends Model
     public function item()
     {
         return $this->belongsTo(Item::class, 'item_id');
+    }
+
+    public function period()
+    {
+        return $this->belongsTo(PieceworkPayrollPeriod::class, 'payroll_period_id');
     }
 }

@@ -22,9 +22,9 @@ return new class extends Migration
 
             $table->foreignId('item_category_id')
                 ->nullable()
+                ->after('code') // atau after kolom lain, sesuaikan
                 ->constrained('item_categories')
-                ->nullOnDelete()
-                ->cascadeOnUpdate();
+                ->nullOnDelete();
 
             // HPP (moving average)
             $table->decimal('last_purchase_price', 18, 2)->default(0);

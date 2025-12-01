@@ -50,28 +50,28 @@ class ItemSeeder extends Seeder
                 'name' => 'Celana SJR Ukuran 7XL Hitam',
                 'unit' => 'pcs',
                 'type' => 'finished_good',
-                'item_category_id' => 3, // kategori barang jadi
+                'item_category_id' => 4, // kategori barang jadi
             ],
             [
                 'code' => 'J7BLK',
                 'name' => 'Celana LJR Ukuran 5 Hitam',
                 'unit' => 'pcs',
                 'type' => 'finished_good',
-                'item_category_id' => 3,
+                'item_category_id' => 5,
             ],
             [
                 'code' => 'K7NVY',
                 'name' => 'Celana SJR Ukuran 7XL Navy',
                 'unit' => 'pcs',
                 'type' => 'finished_good',
-                'item_category_id' => 3, // kategori barang jadi
+                'item_category_id' => 4, // kategori barang jadi
             ],
             [
                 'code' => 'J7NVY',
                 'name' => 'Celana LJR Ukuran 5 Navy',
                 'unit' => 'pcs',
                 'type' => 'finished_good',
-                'item_category_id' => 3,
+                'item_category_id' => 5,
             ],
 
             // ===================

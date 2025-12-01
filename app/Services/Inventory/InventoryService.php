@@ -497,4 +497,87 @@ class InventoryService
         return $this->num($stock?->qty ?? 0);
     }
 
+    /**
+     * Stok available di satu gudang untuk satu item.
+     * Untuk saat ini = on hand, karena belum ada konsep reserved.
+     */
+    public function getAvailableStock(int $warehouseId, int $itemId): float
+    {
+        // Kalau nanti kamu punya reserved, tinggal ubah logika di sini saja.
+        return $this->getOnHandQty($warehouseId, $itemId);
+    }
+
+    /**
+     * Ringkasan stok per gudang untuk 1 item.
+     *
+     * Return array:
+     * [
+     *   [
+     *     'warehouse_id' => 2,
+     *     'code'         => 'WH-PRD',
+     *     'name'         => 'Gudang Produksi',
+     *     'on_hand'      => 150,
+     *     'reserved'     => 0,
+     *     'available'    => 150,
+     *   ],
+     *   ...
+     * ]
+     */
+    public function getStockSummaryForItem(int $itemId): array
+    {
+        /** @var \Illuminate\Support\Collection $rows */
+        $rows = InventoryStock::query()
+            ->with('warehouse') // pastikan di model InventoryStock ada belongsTo warehouse()
+            ->where('item_id', $itemId)
+            ->where('qty', '!=', 0)
+            ->get();
+
+        return $rows->map(function (InventoryStock $row) {
+            $onHand = $this->num($row->qty ?? 0);
+            $reserved = 0.0; // nanti kalau kamu punya konsep reserved, tinggal ganti di sini
+            $available = $onHand - $reserved;
+
+            return [
+                'warehouse_id' => $row->warehouse_id,
+                'code' => $row->warehouse->code ?? null,
+                'name' => $row->warehouse->name ?? null,
+                'on_hand' => $onHand,
+                'reserved' => $reserved,
+                'available' => $available,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Wrapper sederhana untuk transfer stok antar gudang.
+     *
+     * Urutan parameter disesuaikan dengan pemakaian di controller:
+     * move(itemId, fromWarehouseId, toWarehouseId, qty, referenceType, referenceId, notes, date, allowNegative, lotId)
+     */
+    public function move(
+        int $itemId,
+        int $fromWarehouseId,
+        int $toWarehouseId,
+        float | int | string $qty,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
+        ?string $notes = null,
+        string | \DateTimeInterface  | null $date = null,
+        bool $allowNegative = false,
+        ?int $lotId = null,
+    ): array {
+        return $this->transfer(
+            fromWarehouseId: $fromWarehouseId,
+            toWarehouseId: $toWarehouseId,
+            itemId: $itemId,
+            qty: $qty,
+            date: $date,
+            sourceType: $referenceType,
+            sourceId: $referenceId,
+            notes: $notes,
+            allowNegative: $allowNegative,
+            lotId: $lotId,
+        );
+    }
+
 }

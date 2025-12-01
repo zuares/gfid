@@ -20,82 +20,89 @@ class CuttingPayrollGenerator
      * @param  int|null $createdByUserId
      * @return \App\Models\PieceworkPayrollPeriod
      */
-    public static function generate($periodStart, $periodEnd, ?int $createdByUserId = null): PieceworkPayrollPeriod
-    {
-        // Normalisasi tanggal ke Carbon
+
+    public static function generate(
+        $periodStart,
+        $periodEnd,
+        ?int $createdByUserId = null,
+        ?PieceworkPayrollPeriod $existingPeriod = null,
+    ): PieceworkPayrollPeriod {
         $start = Carbon::parse($periodStart)->startOfDay();
         $end = Carbon::parse($periodEnd)->endOfDay();
 
-        return DB::transaction(function () use ($start, $end, $createdByUserId) {
-            // 1. Buat / simpan periode payroll baru (status draft)
-            $period = PieceworkPayrollPeriod::create([
-                'module' => 'cutting',
-                'period_start' => $start->toDateString(),
-                'period_end' => $end->toDateString(),
-                'status' => 'draft',
-                'notes' => null,
-                'created_by' => $createdByUserId,
-            ]);
+        return DB::transaction(function () use ($start, $end, $createdByUserId, $existingPeriod) {
+            // 1. Siapkan / pakai period
+            if ($existingPeriod) {
+                $period = $existingPeriod->fresh();
+                $period->lines()->delete();
+                $period->total_amount = 0;
+                $period->save();
+            } else {
+                $period = PieceworkPayrollPeriod::create([
+                    'module' => 'cutting',
+                    'period_start' => $start->toDateString(),
+                    'period_end' => $end->toDateString(),
+                    'status' => 'draft',
+                    'created_by' => $createdByUserId,
+                    'total_amount' => 0,
+                ]);
+            }
 
-            // 2. Ambil summary qty_qc_ok per operator + kategori + item
-            //    Dari cutting_job_bundles join cutting_jobs & items
+            // 2. Agregasi dari Cutting Job + Bundles
             $rows = CuttingJobBundle::query()
                 ->join('cutting_jobs', 'cutting_job_bundles.cutting_job_id', '=', 'cutting_jobs.id')
                 ->join('items', 'cutting_job_bundles.finished_item_id', '=', 'items.id')
             // filter tanggal & status job
-                ->whereBetween('cutting_jobs.date', [$start->toDateString(), $end->toDateString()])
-                ->where('cutting_jobs.status', 'done')
+                ->whereBetween('cutting_jobs.date', [$start, $end])
+                ->where('cutting_jobs.status', 'qc_done')
             // hanya yang qty_qc_ok > 0
                 ->where('cutting_job_bundles.qty_qc_ok', '>', 0)
-            // ambil operator: pakai operator bundle kalau ada, kalau null pakai operator job
+            // agregasi operator, kategori, item
                 ->selectRaw('
-                    COALESCE(cutting_job_bundles.operator_id, cutting_jobs.operator_id) as employee_id,
-                    items.item_category_id as item_category_id,
-                    cutting_job_bundles.finished_item_id as item_id,
-                    SUM(cutting_job_bundles.qty_qc_ok) as total_qty_ok
-                ')
-                ->groupBy('employee_id', 'item_category_id', 'item_id')
+                COALESCE(cutting_job_bundles.operator_id, cutting_jobs.operator_id) as employee_id,
+                COALESCE(cutting_job_bundles.item_category_id, items.item_category_id) as item_category_id,
+                cutting_job_bundles.finished_item_id as item_id,
+                SUM(cutting_job_bundles.qty_qc_ok) as total_qty_ok
+            ')
+                ->groupByRaw('
+                COALESCE(cutting_job_bundles.operator_id, cutting_jobs.operator_id),
+                COALESCE(cutting_job_bundles.item_category_id, items.item_category_id),
+                cutting_job_bundles.finished_item_id
+            ')
                 ->get();
 
-            // Kalau tidak ada data, tetap kembalikan period dengan lines kosong
-            if ($rows->isEmpty()) {
-                return $period;
-            }
+            $totalAmount = 0;
+            $atDate = $end->toDateString();
 
             foreach ($rows as $row) {
-                $employeeId = (int) $row->employee_id;
-                $itemCategoryId = $row->item_category_id ? (int) $row->item_category_id : null;
-                $itemId = $row->item_id ? (int) $row->item_id : null;
-                $totalQtyOk = (float) $row->total_qty_ok;
-
-                if (!$employeeId || $totalQtyOk <= 0) {
-                    continue;
-                }
-
-                // 3. Cari tarif dari piece_rates (module= cutting)
-                $rate = self::resolveRateForCutting(
-                    employeeId: $employeeId,
-                    itemCategoryId: $itemCategoryId,
-                    itemId: $itemId,
-                    atDate: $end->toDateString()
+                // pakai helper yang sudah kamu buat
+                $rateValue = self::resolveRateForCutting(
+                    employeeId: $row->employee_id,
+                    itemCategoryId: $row->item_category_id,
+                    itemId: $row->item_id,
+                    atDate: $atDate,
                 );
 
-                // 4. Hitung amount = qty * rate
-                $amount = $totalQtyOk * $rate;
+                $amount = $rateValue * (float) $row->total_qty_ok;
+                $totalAmount += $amount;
 
-                // 5. Simpan ke piecework_payroll_lines
                 PieceworkPayrollLine::create([
                     'payroll_period_id' => $period->id,
-                    'employee_id' => $employeeId,
-                    'item_category_id' => $itemCategoryId,
-                    'item_id' => $itemId,
-                    'total_qty_ok' => $totalQtyOk,
-                    'rate_per_pcs' => $rate,
+                    'employee_id' => $row->employee_id,
+                    'item_category_id' => $row->item_category_id, // ⬅️ sekarang KEISI
+                    'item_id' => $row->item_id,
+                    'total_qty_ok' => $row->total_qty_ok,
+                    'rate_per_pcs' => $rateValue,
                     'amount' => $amount,
                 ]);
             }
 
-            return $period->fresh('lines');
+            // 3. Update total
+            $period->update([
+                'total_amount' => $totalAmount,
+            ]);
+
+            return $period->fresh(['lines']);
         });
     }
 
@@ -113,7 +120,7 @@ class CuttingPayrollGenerator
      * @param  string      $atDate (YYYY-MM-DD)
      * @return float
      */
-    protected static function resolveRateForCutting(
+    public static function resolveRateForCutting(
         int $employeeId,
         ?int $itemCategoryId,
         ?int $itemId,

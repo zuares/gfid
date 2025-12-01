@@ -32,6 +32,12 @@ return new class extends Migration
                 ->cascadeOnUpdate()
                 ->restrictOnDelete();
 
+            $table->foreignId('item_category_id')
+                ->nullable()
+                ->after('finished_item_id')
+                ->constrained('item_categories')
+                ->nullOnDelete();
+
             $table->decimal('qty_pcs', 12, 2); // isi bundle dalam pcs
 
             // qty kain yang dipakai untuk bundle ini (meter/yard/whatever)

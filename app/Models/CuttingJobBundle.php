@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\ItemCategory;
 use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Model;
 
@@ -32,6 +33,7 @@ class CuttingJobBundle extends Model
         'qty_qc_reject' => 'float',
         'wip_qty' => 'float',
         'sewing_picked_qty' => 'float',
+        'date' => 'date', // ← ini kuncinya
     ];
 
     public function cuttingJob()
@@ -127,6 +129,11 @@ class CuttingJobBundle extends Model
     public function qcCutting()
     {
         return $this->qcResults()->cutting();
+    }
+
+    public function itemCategory()
+    {
+        return $this->belongsTo(ItemCategory::class, 'item_category_id');
     }
 
 }

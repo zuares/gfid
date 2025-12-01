@@ -1,6 +1,8 @@
 <?php
 use App\Http\Controllers\Inventory\ExternalTransferController;
 use App\Http\Controllers\Inventory\InventoryStockController;
+use App\Http\Controllers\Inventory\RtsStockRequestController;
+use App\Http\Controllers\Inventory\RtsStockRequestProcessController;
 use App\Http\Controllers\Inventory\StockCardController;
 use App\Http\Controllers\Inventory\TransferController;
 
@@ -44,3 +46,24 @@ Route::middleware(['auth'])->group(function () {
                 ->name('lots');
         });
 });
+
+Route::prefix('rts/stock-requests')
+    ->name('rts.stock-requests.')
+    ->group(function () {
+        // RTS side (packing online)
+        Route::get('/', [RtsStockRequestController::class, 'index'])->name('index');
+        Route::get('/create', [RtsStockRequestController::class, 'create'])->name('create');
+        Route::post('/', [RtsStockRequestController::class, 'store'])->name('store');
+        Route::get('/{stockRequest}', [RtsStockRequestController::class, 'show'])->name('show');
+    });
+
+Route::prefix('prd/stock-requests')
+    ->name('prd.stock-requests.')
+    ->group(function () {
+        // PRD side (gudang produksi) – proses permintaan RTS
+        Route::get('/', [RtsStockRequestProcessController::class, 'index'])->name('index');
+        Route::get('/{stockRequest}/process', [RtsStockRequestProcessController::class, 'edit'])->name('edit');
+        Route::post('/{stockRequest}/process', [RtsStockRequestProcessController::class, 'update'])->name('update');
+        Route::get('/{stockRequest}', [RtsStockRequestProcessController::class, 'show'])
+            ->name('show');
+    });

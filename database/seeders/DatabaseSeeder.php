@@ -23,6 +23,8 @@ class DatabaseSeeder extends Seeder
             ItemSeeder::class,
             EmployeeSeeder::class,
             WarehouseSeeder::class,
+            // DemoCuttingPayrollSeeder::class,
+            PieceRateSeeder::class,
             // InventoryTransferDemoSeeder::class,
         ]);
     }

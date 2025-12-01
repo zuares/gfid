@@ -1,5 +1,6 @@
 <?php
 use App\Http\Controllers\Api\ItemController;
+use App\Http\Controllers\Api\StockApiController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -12,3 +13,9 @@ Route::prefix('v1')->group(function () {
     // Detail item
     Route::get('/items/{item}', [ItemController::class, 'show'])->name('api.items.show');
 });
+
+Route::get('/stock/available', [StockApiController::class, 'available'])
+    ->name('api.stock.available');
+
+Route::get('/stock/summary', [StockApiController::class, 'summary'])
+    ->name('api.stock.summary');

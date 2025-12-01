@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class InventoryMutation extends Model
 {
+    protected $table = 'inventory_mutations';
     protected $fillable = [
         'date',
         'warehouse_id',

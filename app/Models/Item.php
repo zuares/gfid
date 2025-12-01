@@ -105,4 +105,18 @@ class Item extends Model
     {
         return $this->type === 'accessory';
     }
+
+    public function finishingLines()
+    {
+        return $this->hasMany(FinishingJobLine::class, 'item_id');
+    }
+
+    public function scopeInStockAtWarehouse($query, int $warehouseId)
+    {
+        return $query->whereHas('inventoryStocks', function ($q) use ($warehouseId) {
+            $q->where('warehouse_id', $warehouseId)
+                ->where('qty', '>', 0);
+        });
+    }
+
 }
