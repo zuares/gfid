@@ -4,11 +4,13 @@
     $poOpen = request()->routeIs('purchasing.purchase_orders.*');
     $grnOpen = request()->routeIs('purchasing.purchase_receipts.*');
 
-    // Inventory internal (stock card + transfers + stock items/lots)
+    // Inventory internal (stock card + transfers + stock items/lots + stock opname + adjustments)
     $invOpen =
         request()->routeIs('inventory.stock_card.*') ||
         request()->routeIs('inventory.transfers.*') ||
-        request()->routeIs('inventory.stocks.*');
+        request()->routeIs('inventory.stocks.*') ||
+        request()->routeIs('inventory.stock_opnames.*') ||
+        request()->routeIs('inventory.adjustments.*');
 
     // Inventory external transfers
     $extInvOpen = request()->routeIs('inventory.external_transfers.*');
@@ -338,6 +340,20 @@
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('inventory.transfers.create') ? 'active' : '' }}">
                     <span class="icon">➕</span>
                     <span>Transfer Baru</span>
+                </a>
+
+                {{-- Stock Opname --}}
+                <a href="{{ route('inventory.stock_opnames.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('inventory.stock_opnames.*') ? 'active' : '' }}">
+                    <span class="icon">📊</span>
+                    <span>Stock Opname</span>
+                </a>
+
+                {{-- Inventory Adjustments --}}
+                <a href="{{ route('inventory.adjustments.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('inventory.adjustments.*') ? 'active' : '' }}">
+                    <span class="icon">⚖️</span>
+                    <span>Inventory Adjustments</span>
                 </a>
             </div>
         </li>

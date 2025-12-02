@@ -1,10 +1,11 @@
 <?php
 use App\Http\Controllers\Inventory\ExternalTransferController;
+use App\Http\Controllers\Inventory\InventoryAdjustmentController;
 use App\Http\Controllers\Inventory\InventoryStockController;
 use App\Http\Controllers\Inventory\RtsStockRequestController;
 use App\Http\Controllers\Inventory\RtsStockRequestProcessController;
 use App\Http\Controllers\Inventory\StockCardController;
-use App\Http\Controllers\Inventory\TransferController;
+use App\Http\Controllers\Inventory\StockOpnameController;
 
 Route::middleware(['web', 'auth'])
     ->prefix('inventory')
@@ -66,4 +67,33 @@ Route::prefix('prd/stock-requests')
         Route::post('/{stockRequest}/process', [RtsStockRequestProcessController::class, 'update'])->name('update');
         Route::get('/{stockRequest}', [RtsStockRequestProcessController::class, 'show'])
             ->name('show');
+    });
+
+Route::prefix('inventory')
+    ->name('inventory.')
+    ->middleware(['web', 'auth'])
+    ->group(function () {
+        Route::get('stock-opnames', [StockOpnameController::class, 'index'])->name('stock_opnames.index');
+        Route::get('stock-opnames/create', [StockOpnameController::class, 'create'])->name('stock_opnames.create');
+        Route::post('stock-opnames', [StockOpnameController::class, 'store'])->name('stock_opnames.store');
+        Route::get('stock-opnames/{stockOpname}', [StockOpnameController::class, 'show'])->name('stock_opnames.show');
+        Route::get('stock-opnames/{stockOpname}/edit', [StockOpnameController::class, 'edit'])->name('stock_opnames.edit');
+        Route::put('stock-opnames/{stockOpname}', [StockOpnameController::class, 'update'])->name('stock_opnames.update');
+
+        // Finalize → auto create Inventory Adjustment + mutations
+        Route::post('stock-opnames/{stockOpname}/finalize', [StockOpnameController::class, 'finalize'])
+            ->name('stock_opnames.finalize');
+    });
+
+Route::middleware(['web', 'auth'])
+    ->prefix('inventory')
+    ->name('inventory.')
+    ->group(function () {
+        // ... route inventory lain (stock_card, transfers, dll)
+
+        Route::get('adjustments', [InventoryAdjustmentController::class, 'index'])
+            ->name('adjustments.index');
+
+        Route::get('adjustments/{inventoryAdjustment}', [InventoryAdjustmentController::class, 'show'])
+            ->name('adjustments.show');
     });
