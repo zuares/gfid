@@ -235,38 +235,38 @@ class SewingPickupController extends Controller
                 $bundle->save();
 
                 // =======================
-                // 🔁 BLOK COSTING / INVENTORY
                 // =======================
+// 🔁 BLOK COSTING / INVENTORY
+// =======================
 
                 $notes = "Sewing pickup {$pickup->code} - bundle {$bundle->bundle_code}";
 
-                // 1️⃣ Ambil unit_cost per pcs dari WIP-CUT untuk LOT + item ini
-
+// 1️⃣ Ambil unit_cost per pcs dari WIP-CUT (berdasarkan mutasi incoming WIP-CUT)
                 $unitCostPerPiece = $this->inventory->getItemIncomingUnitCost(
                     warehouseId: $wipCutWarehouseId,
                     itemId: $bundle->finished_item_id,
                 );
-                //    Ini memastikan biaya di WIP-SEW = biaya di WIP-CUT (tidak bikin HPP baru).
+
                 if ($unitCostPerPiece === null || $unitCostPerPiece <= 0) {
-                    $unitCostPerPiece = 0; // atau biarkan null, tapi kamu harus sadar HPP = 0
+                    $unitCostPerPiece = 0; // atau biarkan null kalau mau jelas bedanya "belum dikosting"
                 }
 
-                // 1) Keluar dari WIP-CUT
+// 1) Keluar dari WIP-CUT (WIP → WIP, TANPA LOT)
                 $this->inventory->stockOut(
                     warehouseId: $wipCutWarehouseId,
                     itemId: $bundle->finished_item_id,
                     qty: $qty,
                     date: $date,
-                    sourceType: SewingPickup::class,
+                    sourceType: SewingPickup::class, // atau 'sewing_pickup' kalau kamu pakai string
                     sourceId: $pickup->id,
                     notes: $notes,
                     allowNegative: false,
-                    lotId: $bundle->lot_id,
-                    unitCostOverride: $unitCostPerPiece, // ⬅️ pakai cost WIP, bukan LotCost kain
-                    affectLotCost: false, // ⬅️ jangan konsumsi LotCost lagi
+                    lotId: null, // ✅ WIP tidak pakai LOT
+                    unitCostOverride: $unitCostPerPiece, // optional, tergantung implementasi InventoryService
+                    affectLotCost: false, // ✅ jangan sentuh LotCost kain
                 );
 
-// 2) Masuk ke WIP-SEW
+// 2) Masuk ke WIP-SEW (still WIP, TANPA LOT)
                 $this->inventory->stockIn(
                     warehouseId: $sewingWarehouseId,
                     itemId: $bundle->finished_item_id,
@@ -275,9 +275,9 @@ class SewingPickupController extends Controller
                     sourceType: SewingPickup::class,
                     sourceId: $pickup->id,
                     notes: $notes,
-                    lotId: $bundle->lot_id,
-                    unitCost: $unitCostPerPiece,
-                    affectLotCost: false,
+                    lotId: null, // ✅ tidak pakai LOT
+                    unitCost: $unitCostPerPiece, // cost WIP ikut pindah
+                    affectLotCost: false, // ✅ tidak mengubah LotCost
                 );
 
                 $createdLines++;

@@ -311,20 +311,22 @@ class SewingReturnController extends Controller
                 $line->save();
 
                 // ==============================
-                //  MUTASI STOK (TANPA LOT)
-                // ==============================
+//  MUTASI STOK (TANPA LOT)
+// ==============================
 
-                // 1) Keluar dari WIP-SEW: total OK + Reject
+// 1) Keluar dari WIP-SEW: total OK + Reject
                 $totalProcessed = $qtyOk + $qtyReject;
 
 // Ambil unit_cost per pcs di WIP-SEW untuk item ini
                 $unitCostPerPiece = $this->inventory->getItemIncomingUnitCost(
-                    warehouseId: $pickup->warehouse_id,
+                    warehouseId: $pickup->warehouse_id, // WIP-SEW
                     itemId: $item->id,
                 );
-// Biar ga getDate berulang2
+
                 $movementDate = $data['date'] ?? now();
-                $movementUnitCost = $unitCostPerPiece > 0 ? $unitCostPerPiece : null;
+                $movementUnitCost = ($unitCostPerPiece !== null && $unitCostPerPiece > 0)
+                ? $unitCostPerPiece
+                : null;
 
 // 1) Keluar dari WIP-SEW (total OK + Reject)
                 if ($totalProcessed > 0) {
@@ -337,11 +339,9 @@ class SewingReturnController extends Controller
                         sourceId: $returnLine->id,
                         notes: "Keluar dari WIP-SEW (OK {$qtyOk}, Reject {$qtyReject})",
                         allowNegative: false,
-                        // kalau mau track per LOT, pakai lotId bundle:
-                        lotId: $bundle->lot_id ?? null,
-                        // 🔥 pakai cost WIP-SEW, JANGAN pakai LotCost kain
+                        lotId: null, // ✅ WIP tidak pakai LOT
                         unitCostOverride: $movementUnitCost,
-                        affectLotCost: false, // 🔥 WIP move, tidak mengurangi LotCost kain
+                        affectLotCost: false, // ✅ tidak sentuh LotCost kain
                     );
                 }
 
@@ -355,13 +355,12 @@ class SewingReturnController extends Controller
                         sourceType: 'sewing_returns',
                         sourceId: $returnLine->id,
                         notes: 'Masuk WIP-FIN (hasil jahit OK)',
-                        // tetap bawa LOT supaya chain LOT rapi, tapi tidak sentuh LotCost
-                        lotId: $bundle->lot_id ?? null,
+                        lotId: null, // ✅ tetap tanpa LOT
                         unitCost: $movementUnitCost,
                         affectLotCost: false,
                     );
 
-                    // Update akumulasi WIP-FIN di bundle
+                    // Update akumulasi WIP-FIN di bundle (ini cuma "info" di level bundle, bukan inventory LOT)
                     $currentWipQty = (float) ($bundle->wip_qty ?? 0);
                     $bundle->wip_warehouse_id = $wipFinWarehouse->id;
                     $bundle->wip_qty = $currentWipQty + $qtyOk;
@@ -378,11 +377,12 @@ class SewingReturnController extends Controller
                         sourceType: 'sewing_returns',
                         sourceId: $returnLine->id,
                         notes: 'Masuk REJ-SEW (hasil jahit reject)',
-                        lotId: $bundle->lot_id ?? null,
+                        lotId: null, // ✅ reject juga tidak pakai LOT
                         unitCost: $movementUnitCost,
                         affectLotCost: false,
                     );
                 }
+
             }
 
             if (!$adaBaris) {

@@ -204,7 +204,6 @@ class PurchaseReceiptController extends Controller
                 'notes' => $lineNotes[$i] ?? null,
             ];
         }
-
         $data['lines'] = $lines;
         $data['created_by'] = $request->user()->id;
 

@@ -580,4 +580,10 @@ class ProductionReportController extends Controller
             'operators' => $operators,
         ]);
     }
+
+    /**
+     * 8️⃣ Laporan Chain Produksi per Finished Item
+     * LOT kain → WIP-CUT → WIP-SEW → WIP-FIN → WH-PRD
+     */
+
 }

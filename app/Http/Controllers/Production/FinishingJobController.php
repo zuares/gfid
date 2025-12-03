@@ -111,9 +111,7 @@ class FinishingJobController extends Controller
 
         // =============== FILTER ==================
         if ($itemId = $request->input('item_id')) {
-            $query->whereHas('lot', function ($q) use ($itemId) {
-                $q->where('item_id', $itemId);
-            });
+            $query->where('finished_item_id', $itemId);
         }
 
         if ($color = $request->input('color')) {
