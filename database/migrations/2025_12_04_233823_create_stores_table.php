@@ -10,10 +10,18 @@ return new class extends Migration
     {
         Schema::create('stores', function (Blueprint $table) {
             $table->id();
-            $table->string('code')->unique(); // SHP, TKP, OFFL, IG, dll
+
+            $table->string('code')->unique(); // STP-01, TKP-01, OFFL-01, dll
             $table->string('name');
-            $table->string('channel')->nullable(); // shopee/tokopedia/offline/ig
+
+            // relasi ke channels
+            $table->foreignId('channel_id')
+                ->nullable()
+                ->constrained('channels')
+                ->nullOnDelete();
+
             $table->boolean('is_active')->default(true);
+
             $table->timestamps();
         });
     }

@@ -78,10 +78,13 @@
     $salesInvoiceOpen = request()->routeIs('sales.invoices.*');
 
     // SALES → Shipments
-    $salesShipmentOpen = request()->routeIs('sales.shipments.*') || request()->routeIs('sales.invoices.shipments.*');
+    $salesShipmentOpen = request()->routeIs('sales.shipments.*');
 
     // SALES → Reports (item/channel/shipment analytics)
     $salesReportOpen = request()->routeIs('sales.reports.*');
+
+    // Gabungan: semua menu Sales (Invoices + Shipments + Reports)
+    $salesOpen = $salesInvoiceOpen || $salesShipmentOpen || $salesReportOpen;
 
     // Finance → Finance Reports (pakai laporan sales)
     $financeReportsOpen = $salesReportOpen;
@@ -394,18 +397,15 @@
 
         {{-- Sales Invoices + Shipments + Reports --}}
         <li class="mb-1">
-            <button
-                class="sidebar-link sidebar-toggle {{ $salesInvoiceOpen || $salesShipmentOpen || $salesReportOpen ? 'is-open' : '' }}"
-                type="button" data-bs-toggle="collapse" data-bs-target="#navSales"
-                aria-expanded="{{ $salesInvoiceOpen || $salesShipmentOpen || $salesReportOpen ? 'true' : 'false' }}"
-                aria-controls="navSales">
+            <button class="sidebar-link sidebar-toggle {{ $salesOpen ? 'is-open' : '' }}" type="button"
+                data-bs-toggle="collapse" data-bs-target="#navSales"
+                aria-expanded="{{ $salesOpen ? 'true' : 'false' }}" aria-controls="navSales">
                 <span class="icon">📑</span>
                 <span>Sales</span>
                 <span class="chevron">▸</span>
             </button>
 
-            <div class="collapse {{ $salesInvoiceOpen || $salesShipmentOpen || $salesReportOpen ? 'show' : '' }}"
-                id="navSales">
+            <div class="collapse {{ $salesOpen ? 'show' : '' }}" id="navSales">
                 {{-- Invoices --}}
                 <a href="{{ route('sales.invoices.index') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.invoices.index') ? 'active' : '' }}">
@@ -695,8 +695,6 @@
                     <span class="icon">⚠️</span>
                     <span>Reject Analysis</span>
                 </a>
-
-
 
                 <a href="{{ route('production.reports.lead_time') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.lead_time') ? 'active' : '' }}">

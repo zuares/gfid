@@ -26,6 +26,8 @@ class DatabaseSeeder extends Seeder
             // DemoCuttingPayrollSeeder::class,
             PieceRateSeeder::class,
             ProductionCostPeriodSeeder::class,
+            ChannelsSeeder::class,
+            StoreSeeder::class,
             // InventoryTransferDemoSeeder::class,
 
         ]);

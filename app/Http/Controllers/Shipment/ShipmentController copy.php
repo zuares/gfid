@@ -10,7 +10,6 @@ use App\Models\Shipment;
 use App\Models\ShipmentLine;
 use App\Models\Store;
 use App\Models\Warehouse;
-use App\Services\Costing\HppService;
 use App\Services\Inventory\InventoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,7 +21,6 @@ class ShipmentController extends Controller
 {
     public function __construct(
         protected InventoryService $inventory,
-        protected HppService $hpp, // 🔹 buat ambil HPP final
     ) {}
 
     /**
@@ -153,7 +151,6 @@ class ShipmentController extends Controller
 
     /**
      * Simpan shipment + mutasi stok keluar.
-     * Alur ini = "shipments dulu", langsung posting stok keluar.
      */
     public function store(Request $request): RedirectResponse
     {
@@ -184,7 +181,7 @@ class ShipmentController extends Controller
                     'warehouse_id' => $validated['warehouse_id'],
                     'customer_id' => $validated['customer_id'] ?? null,
                     'store_id' => $validated['store_id'] ?? null,
-                    'status' => 'posted', // langsung dianggap posted (stok sudah keluar)
+                    'status' => 'submitted', // versi ini: langsung dianggap submitted
                     'total_items' => $totalItems,
                     'notes' => $validated['notes'] ?? null,
                     'created_by' => $userId,
@@ -199,15 +196,7 @@ class ShipmentController extends Controller
 
                     $shipment->lines()->save($line);
 
-                    // 🔥 Ambil HPP FINAL aktif untuk item ini (kalau ada)
-                    $snapshot = $this->hpp->getActiveFinalHppForItem(
-                        itemId: $line->item_id,
-                        warehouseId: $shipment->warehouse_id,
-                    );
-
-                    $unitCost = $snapshot?->unit_cost; // bisa null kalau belum ada HPP final
-
-                    // Mutasi stok keluar dari gudang pakai InventoryService versi baru
+                    // 🔥 Mutasi stok keluar dari gudang pakai signature InventoryService yang sekarang
                     $this->inventory->stockOut(
                         warehouseId: $shipment->warehouse_id,
                         itemId: $line->item_id,
@@ -218,8 +207,8 @@ class ShipmentController extends Controller
                         notes: $this->buildShipmentNotes($shipment),
                         allowNegative: false,
                         lotId: null,
-                        unitCostOverride: $unitCost, // ⬅️ pakai HPP final kalau tersedia
-                        affectLotCost: false, // FG → jangan sentuh LotCost kain
+                        unitCostOverride: null,
+                        affectLotCost: false, // shipment FG → tidak mengubah LotCost kain
                     );
                 }
 
@@ -238,7 +227,7 @@ class ShipmentController extends Controller
         return redirect()
             ->route('shipments.show', $shipment)
             ->with('status', 'success')
-            ->with('message', 'Shipment ' . $shipment->shipment_no . ' berhasil dibuat & stok sudah keluar.');
+            ->with('message', 'Shipment ' . $shipment->shipment_no . ' berhasil dibuat.');
     }
 
     /**

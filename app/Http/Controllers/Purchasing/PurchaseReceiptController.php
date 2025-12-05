@@ -290,6 +290,7 @@ class PurchaseReceiptController extends Controller
         $data['lines'] = $lines;
 
         $receipt = $this->service->update($purchase_receipt, $data);
+        dd($receipt);
 
         return redirect()
             ->route('purchasing.purchase_receipts.show', $receipt->id)
@@ -303,7 +304,6 @@ class PurchaseReceiptController extends Controller
     {
         try {
             $receipt = $this->service->post($purchase_receipt);
-
             return redirect()
                 ->route('purchasing.purchase_receipts.show', $receipt->id)
                 ->with('success', 'Goods Receipt berhasil diposting. Stok gudang sudah bertambah.');

@@ -7,9 +7,18 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4 class="mb-0">Sales Invoices</h4>
-            <a href="{{ route('sales.invoices.create') }}" class="btn btn-primary btn-sm">
-                + Invoice Baru
-            </a>
+
+            <div class="btn-group">
+                {{-- Flow biasa: buat invoice manual --}}
+                <a href="{{ route('sales.invoices.create') }}" class="btn btn-primary btn-sm">
+                    + Invoice Baru
+                </a>
+
+                {{-- Flow chain: mulai dari pilih Shipment dulu --}}
+                <a href="{{ route('sales.shipments.index') }}" class="btn btn-outline-secondary btn-sm">
+                    Dari Shipment &raquo;
+                </a>
+            </div>
         </div>
 
         {{-- Alerts --}}

@@ -745,27 +745,10 @@
                     </div>
 
                     <div class="d-flex flex-wrap gap-2">
-                        {{-- Kembali ke list --}}
                         <a href="{{ route('sales.shipments.index') }}" class="btn btn-theme-outline">
                             &larr; Kembali ke list
                         </a>
 
-                        {{-- 🔥 Tombol Invoice (dari Shipment) --}}
-                        @if ($shipment->status === 'posted')
-                            @if (empty($shipment->sales_invoice_id))
-                                <a href="{{ route('sales.invoices.create_from_shipment', $shipment) }}"
-                                    class="btn btn-theme-outline">
-                                    Buat Invoice dari Shipment ini
-                                </a>
-                            @else
-                                <a href="{{ route('sales.invoices.show', $shipment->sales_invoice_id) }}"
-                                    class="btn btn-theme-outline">
-                                    Lihat Invoice {{ $shipment->invoice?->code ?? '' }}
-                                </a>
-                            @endif
-                        @endif
-
-                        {{-- Aksi status --}}
                         @if ($shipment->status === 'draft')
                             <form action="{{ route('sales.shipments.submit', $shipment) }}" method="POST"
                                 onsubmit="return confirm('Submit shipment ini? Setelah submit tidak bisa di-scan lagi.')">
@@ -1125,8 +1108,7 @@
                                     '" id="qty-display-' + line.id + '"></span>' +
                                     '<form action="' + updateUrl +
                                     '" method="POST" class="d-inline qty-edit-form d-none" data-line-id="' +
-                                    line.id +
-                                    '">' +
+                                    line.id + '">' +
                                     '<input type="hidden" name="_token" value="{{ csrf_token() }}">' +
                                     '<input type="hidden" name="_method" value="PATCH">' +
                                     '<input type="number" name="qty" class="form-control form-control-sm qty-edit-input" min="0" value="' +
