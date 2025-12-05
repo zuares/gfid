@@ -1,7 +1,5 @@
 <?php
 
-// app/Http/Controllers/Api/CustomerController.php
-
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -10,35 +8,32 @@ use Illuminate\Http\Request;
 
 class CustomerController extends Controller
 {
-    /**
-     * GET /api/customers/suggest?q=...
-     */
-    public function suggest(Request $request)
+    public function index(Request $request)
     {
-        $q = trim($request->query('q', ''));
-
         $query = Customer::query();
 
-        if ($q !== '') {
-            $query->where(function ($sub) use ($q) {
-                $sub->where('name', 'like', '%' . $q . '%')
-                    ->orWhere('phone', 'like', '%' . $q . '%')
-                    ->orWhere('email', 'like', '%' . $q . '%');
+        if ($search = $request->input('q')) {
+            $query->where(function ($q2) use ($search) {
+                $q2->where('name', 'like', '%' . $search . '%')
+                    ->orWhere('phone', 'like', '%' . $search . '%')
+                    ->orWhere('code', 'like', '%' . $search . '%');
             });
         }
 
-        $customers = $query
-            ->orderBy('name')
-            ->limit(20)
-            ->get();
+        $query->orderBy('name');
+
+        $customers = $query->limit(20)->get([
+            'id',
+            'code',
+            'name',
+            'phone',
+        ]);
 
         return response()->json([
-            'data' => $customers->map(function (Customer $c) {
+            'data' => $customers->map(function ($c) {
                 return [
                     'id' => $c->id,
-                    'name' => $c->name,
-                    'phone' => $c->phone,
-                    'email' => $c->email,
+                    'label' => trim(($c->code ? $c->code . ' - ' : '') . $c->name . ($c->phone ? ' (' . $c->phone . ')' : '')),
                 ];
             }),
         ]);

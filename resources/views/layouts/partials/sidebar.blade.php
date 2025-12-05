@@ -21,9 +21,20 @@
     // Production Cutting Jobs
     $prodCutOpen = request()->routeIs('production.cutting_jobs.*');
 
-    // Production Sewing (pickups + returns)
+    // Production Sewing (pickups + returns + SEWING reports)
     $prodSewOpen =
-        request()->routeIs('production.sewing_pickups.*') || request()->routeIs('production.sewing_returns.*');
+        request()->routeIs('production.sewing_pickups.*') ||
+        request()->routeIs('production.sewing_returns.*') ||
+        // Sewing-only reports: semua pakai prefix nama route production.reports.*
+        request()->routeIs('production.reports.operators') ||
+        request()->routeIs('production.reports.outstanding') ||
+        request()->routeIs('production.reports.aging_wip_sew') ||
+        request()->routeIs('production.reports.productivity') ||
+        request()->routeIs('production.reports.partial_pickup') ||
+        request()->routeIs('production.reports.report_reject') ||
+        request()->routeIs('production.reports.dashboard') ||
+        request()->routeIs('production.reports.lead_time') ||
+        request()->routeIs('production.reports.operator_behavior');
 
     // Production Finishing
     $prodFinOpen =
@@ -37,9 +48,13 @@
     // Production QC (cutting / sewing nanti)
     $prodQcOpen = request()->routeIs('production.qc.*');
 
-    // Production Reports
+    // Production-wide Reports (daily, reject, wip-sew, sewing-per-item, finishing-jobs summary, finishing per item)
     $prodReportOpen =
-        request()->routeIs('production.reports.*') ||
+        request()->routeIs('production.reports.daily_production') ||
+        request()->routeIs('production.reports.reject_detail') ||
+        request()->routeIs('production.reports.wip_sewing_age') ||
+        request()->routeIs('production.reports.sewing_per_item') ||
+        request()->routeIs('production.reports.finishing_jobs') ||
         request()->routeIs('production.finishing_jobs.report_per_item') ||
         request()->routeIs('production.finishing_jobs.report_per_item_detail');
 
@@ -50,11 +65,26 @@
         request()->routeIs('payroll.piece_rates.*') ||
         request()->routeIs('payroll.reports.*');
 
+    // Finance → Costing / HPP (HPP FG + Production Cost Periods)
+    $costingOpen = request()->routeIs('costing.hpp.*') || request()->routeIs('costing.production_cost_periods.*');
+
     // MASTER DATA (items + customers)
-    $masterOpen = request()->routeIs('items.*') || request()->routeIs('customers.*');
+    $masterOpen = request()->routeIs('master.customers.*') || request()->routeIs('master.items.*');
 
     // SALES / MARKETPLACE
     $marketplaceOpen = request()->routeIs('marketplace.orders.*');
+
+    // SALES → Invoices
+    $salesInvoiceOpen = request()->routeIs('sales.invoices.*');
+
+    // SALES → Shipments
+    $salesShipmentOpen = request()->routeIs('sales.shipments.*') || request()->routeIs('sales.invoices.shipments.*');
+
+    // SALES → Reports (item/channel/shipment analytics)
+    $salesReportOpen = request()->routeIs('sales.reports.*');
+
+    // Finance → Finance Reports (pakai laporan sales)
+    $financeReportsOpen = $salesReportOpen;
 @endphp
 
 <style>
@@ -264,14 +294,17 @@
             </button>
 
             <div class="collapse {{ $masterOpen ? 'show' : '' }}" id="navMaster">
-                <a href="{{ route('items.index') }}"
-                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('items.*') ? 'active' : '' }}">
+                {{-- Nanti kalau modul Items sudah siap, tinggal buka ini --}}
+                {{--
+                <a href="{{ route('master.items.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('master.items.*') ? 'active' : '' }}">
                     <span class="icon">🏷️</span>
                     <span>Items</span>
                 </a>
+                --}}
 
-                <a href="{{ route('customers.index') }}"
-                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('customers.*') ? 'active' : '' }}">
+                <a href="{{ route('master.customers.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('master.customers.*') ? 'active' : '' }}">
                     <span class="icon">👤</span>
                     <span>Customers</span>
                 </a>
@@ -334,6 +367,7 @@
         {{-- SALES / MARKETPLACE --}}
         <li class="mt-2 text-uppercase small menu-label">Sales &amp; Marketplace</li>
 
+        {{-- Marketplace Orders --}}
         <li class="mb-1">
             <button class="sidebar-link sidebar-toggle {{ $marketplaceOpen ? 'is-open' : '' }}" type="button"
                 data-bs-toggle="collapse" data-bs-target="#navMarketplace"
@@ -354,6 +388,77 @@
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('marketplace.orders.create') ? 'active' : '' }}">
                     <span class="icon">＋</span>
                     <span>Order Manual</span>
+                </a>
+            </div>
+        </li>
+
+        {{-- Sales Invoices + Shipments + Reports --}}
+        <li class="mb-1">
+            <button
+                class="sidebar-link sidebar-toggle {{ $salesInvoiceOpen || $salesShipmentOpen || $salesReportOpen ? 'is-open' : '' }}"
+                type="button" data-bs-toggle="collapse" data-bs-target="#navSales"
+                aria-expanded="{{ $salesInvoiceOpen || $salesShipmentOpen || $salesReportOpen ? 'true' : 'false' }}"
+                aria-controls="navSales">
+                <span class="icon">📑</span>
+                <span>Sales</span>
+                <span class="chevron">▸</span>
+            </button>
+
+            <div class="collapse {{ $salesInvoiceOpen || $salesShipmentOpen || $salesReportOpen ? 'show' : '' }}"
+                id="navSales">
+                {{-- Invoices --}}
+                <a href="{{ route('sales.invoices.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.invoices.index') ? 'active' : '' }}">
+                    <span class="icon">≡</span>
+                    <span>Daftar Invoice</span>
+                </a>
+
+                <a href="{{ route('sales.invoices.create') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.invoices.create') ? 'active' : '' }}">
+                    <span class="icon">＋</span>
+                    <span>Invoice Baru</span>
+                </a>
+
+                {{-- Shipments --}}
+                <div class="px-3 pt-2 pb-1 text-uppercase"
+                    style="font-size:.68rem; letter-spacing:.12em; color:var(--muted);">
+                    Shipments
+                </div>
+
+                <a href="{{ route('sales.shipments.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.shipments.index') ? 'active' : '' }}">
+                    <span class="icon">🚚</span>
+                    <span>Daftar Shipment</span>
+                </a>
+
+                <a href="{{ route('sales.shipments.create') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.shipments.create') ? 'active' : '' }}">
+                    <span class="icon">＋</span>
+                    <span>Shipment Baru</span>
+                </a>
+
+                {{-- Sales Reports --}}
+                <div class="px-3 pt-2 pb-1 text-uppercase"
+                    style="font-size:.68rem; letter-spacing:.12em; color:var(--muted);">
+                    Sales Reports
+                </div>
+
+                <a href="{{ route('sales.reports.item_profit') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.reports.item_profit') ? 'active' : '' }}">
+                    <span class="icon">💹</span>
+                    <span>Laba Rugi per Item</span>
+                </a>
+
+                <a href="{{ route('sales.reports.channel_profit') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.reports.channel_profit') ? 'active' : '' }}">
+                    <span class="icon">🏬</span>
+                    <span>Laba Rugi per Channel</span>
+                </a>
+
+                <a href="{{ route('sales.reports.shipment_analytics') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.reports.shipment_analytics') ? 'active' : '' }}">
+                    <span class="icon">📦</span>
+                    <span>Shipment Analytics</span>
                 </a>
             </div>
         </li>
@@ -517,6 +622,7 @@
             </button>
 
             <div class="collapse {{ $prodSewOpen ? 'show' : '' }}" id="navProductionSewing">
+                {{-- Sewing Pickups --}}
                 <a href="{{ route('production.sewing_pickups.index') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_pickups.index') ? 'active' : '' }}">
                     <span class="icon">📤</span>
@@ -529,6 +635,7 @@
                     <span>Pickup Baru</span>
                 </a>
 
+                {{-- Sewing Returns --}}
                 <a href="{{ route('production.sewing_returns.index') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_returns.index') ? 'active' : '' }}">
                     <span class="icon">📥</span>
@@ -539,6 +646,68 @@
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.sewing_returns.create') ? 'active' : '' }}">
                     <span class="icon">＋</span>
                     <span>Return Baru</span>
+                </a>
+
+                {{-- Sewing-only Reports --}}
+                <div class="px-3 pt-2 pb-1 text-uppercase"
+                    style="font-size:.68rem; letter-spacing:.12em; color:var(--muted);">
+                    Sewing Reports
+                </div>
+
+                <a href="{{ route('production.reports.dashboard') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.dashboard') ? 'active' : '' }}">
+                    <span class="icon">📋</span>
+                    <span>Daily Dashboard</span>
+                </a>
+
+                <a href="{{ route('production.reports.operators') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.operators') ? 'active' : '' }}">
+                    <span class="icon">👥</span>
+                    <span>Operator Summary</span>
+                </a>
+
+                <a href="{{ route('production.reports.outstanding') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.outstanding') ? 'active' : '' }}">
+                    <span class="icon">⏳</span>
+                    <span>Outstanding</span>
+                </a>
+
+                <a href="{{ route('production.reports.aging_wip_sew') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.aging_wip_sew') ? 'active' : '' }}">
+                    <span class="icon">📊</span>
+                    <span>Aging WIP Sewing</span>
+                </a>
+
+                <a href="{{ route('production.reports.productivity') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.productivity') ? 'active' : '' }}">
+                    <span class="icon">📈</span>
+                    <span>Productivity</span>
+                </a>
+
+                <a href="{{ route('production.reports.partial_pickup') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.partial_pickup') ? 'active' : '' }}">
+                    <span class="icon">🧩</span>
+                    <span>Partial Pickup</span>
+                </a>
+
+                <a href="{{ route('production.reports.report_reject') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.report_reject') ? 'active' : '' }}">
+                    <span class="icon">⚠️</span>
+                    <span>Reject Analysis</span>
+                </a>
+
+
+
+                <a href="{{ route('production.reports.lead_time') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.lead_time') ? 'active' : '' }}">
+                    <span class="icon">⏱️</span>
+                    <span>Lead Time</span>
+                </a>
+
+                <a href="{{ route('production.reports.operator_behavior') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.operator_behavior') ? 'active' : '' }}">
+                    <span class="icon">👀</span>
+                    <span>Operator Behavior</span>
                 </a>
             </div>
         </li>
@@ -645,7 +814,7 @@
                 <a href="{{ route('production.reports.wip_sewing_age') }}"
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.wip_sewing_age') ? 'active' : '' }}">
                     <span class="icon">⏳</span>
-                    <span>WIP Sewing Age</span>
+                    <span>WIP Sewing Age (Report)</span>
                 </a>
 
                 <a href="{{ route('production.reports.sewing_per_item') }}"
@@ -658,6 +827,12 @@
                     class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.reject_detail') ? 'active' : '' }}">
                     <span class="icon">⚠️</span>
                     <span>Reject Detail</span>
+                </a>
+
+                <a href="{{ route('production.reports.finishing_jobs') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('production.reports.finishing_jobs') ? 'active' : '' }}">
+                    <span class="icon">🧶</span>
+                    <span>Finishing Jobs Summary</span>
                 </a>
 
                 <a href="{{ route('production.finishing_jobs.report_per_item') }}"
@@ -719,11 +894,60 @@
             </div>
         </li>
 
-        <li>
-            <a href="#" class="sidebar-link">
+        {{-- Costing / HPP --}}
+        <li class="mb-1">
+            <button class="sidebar-link sidebar-toggle {{ $costingOpen ? 'is-open' : '' }}" type="button"
+                data-bs-toggle="collapse" data-bs-target="#navFinanceCosting"
+                aria-expanded="{{ $costingOpen ? 'true' : 'false' }}" aria-controls="navFinanceCosting">
+                <span class="icon">📉</span>
+                <span>Costing &amp; HPP</span>
+                <span class="chevron">▸</span>
+            </button>
+
+            <div class="collapse {{ $costingOpen ? 'show' : '' }}" id="navFinanceCosting">
+                <a href="{{ route('costing.hpp.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('costing.hpp.*') ? 'active' : '' }}">
+                    <span class="icon">⚙️</span>
+                    <span>HPP Finished Goods</span>
+                </a>
+
+                <a href="{{ route('costing.production_cost_periods.index') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('costing.production_cost_periods.*') ? 'active' : '' }}">
+                    <span class="icon">📆</span>
+                    <span>Production Cost Periods</span>
+                </a>
+            </div>
+        </li>
+
+        {{-- Finance Reports --}}
+        <li class="mb-1">
+            <button class="sidebar-link sidebar-toggle {{ $financeReportsOpen ? 'is-open' : '' }}" type="button"
+                data-bs-toggle="collapse" data-bs-target="#navFinanceReports"
+                aria-expanded="{{ $financeReportsOpen ? 'true' : 'false' }}" aria-controls="navFinanceReports">
                 <span class="icon">📊</span>
                 <span>Finance Reports</span>
-            </a>
+                <span class="chevron">▸</span>
+            </button>
+
+            <div class="collapse {{ $financeReportsOpen ? 'show' : '' }}" id="navFinanceReports">
+                <a href="{{ route('sales.reports.item_profit') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.reports.item_profit') ? 'active' : '' }}">
+                    <span class="icon">💹</span>
+                    <span>Laba Rugi per Item</span>
+                </a>
+
+                <a href="{{ route('sales.reports.channel_profit') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.reports.channel_profit') ? 'active' : '' }}">
+                    <span class="icon">🏬</span>
+                    <span>Laba Rugi per Channel</span>
+                </a>
+
+                <a href="{{ route('sales.reports.shipment_analytics') }}"
+                    class="sidebar-link sidebar-link-sub {{ request()->routeIs('sales.reports.shipment_analytics') ? 'active' : '' }}">
+                    <span class="icon">📦</span>
+                    <span>Shipment Analytics</span>
+                </a>
+            </div>
         </li>
     </ul>
 </aside>

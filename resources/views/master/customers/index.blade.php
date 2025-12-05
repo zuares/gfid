@@ -2,143 +2,105 @@
 
 @section('title', 'Customers')
 
-@push('head')
-    <style>
-        .page-wrap {
-            max-width: 1000px;
-            margin-inline: auto;
-            padding: .75rem .75rem 4rem;
-        }
-
-        body[data-theme="light"] .page-wrap {
-            background: radial-gradient(circle at top left,
-                    rgba(59, 130, 246, 0.10) 0,
-                    rgba(45, 212, 191, 0.08) 26%,
-                    #f9fafb 60%);
-        }
-
-        .card-main {
-            background: var(--card);
-            border-radius: 14px;
-            border: 1px solid rgba(148, 163, 184, 0.30);
-            box-shadow:
-                0 10px 26px rgba(15, 23, 42, 0.06),
-                0 0 0 1px rgba(15, 23, 42, 0.03);
-        }
-    </style>
-@endpush
-
 @section('content')
     <div class="page-wrap">
-
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h5 class="mb-0">Customers</h5>
-                <div class="small text-muted">
-                    Master customer untuk penjualan & marketplace.
-                </div>
+                <h1 class="h4 mb-1">Customers</h1>
+                <p class="text-muted mb-0">
+                    Master data customer untuk Marketplace Order, Sales Invoice, dan Shipment.
+                </p>
             </div>
-            <div>
-                <a href="{{ route('customers.create') }}" class="btn btn-sm btn-primary">
-                    + Tambah Customer
-                </a>
-            </div>
+            <a href="{{ route('master.customers.create') }}" class="btn btn-primary btn-sm">
+                + Customer Baru
+            </a>
         </div>
 
-        {{-- Filter --}}
-        <div class="card card-main mb-3">
+        @if (session('status'))
+            <div class="alert alert-success py-2 px-3 small">
+                {{ session('status') }}
+            </div>
+        @endif
+
+        <div class="card shadow-sm border-0 mb-3">
             <div class="card-body py-2">
-                <form action="{{ route('customers.index') }}" method="GET" class="row g-2 align-items-end">
-                    <div class="col-md-5">
-                        <label class="form-label small mb-1">Cari</label>
+                <form method="GET" action="{{ route('master.customers.index') }}" class="row g-2 align-items-center">
+                    <div class="col-auto">
+                        <label class="col-form-label col-form-label-sm">Cari</label>
+                    </div>
+                    <div class="col-auto">
                         <input type="text" name="q" class="form-control form-control-sm"
-                            placeholder="Nama / telepon / email" value="{{ request('q') }}">
+                            placeholder="Nama / kode / HP" value="{{ request('q') }}">
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label small mb-1">Status</label>
-                        <select name="active" class="form-select form-select-sm">
-                            <option value="">- Semua -</option>
-                            <option value="1" @selected(request('active') === '1')>Aktif</option>
-                            <option value="0" @selected(request('active') === '0')>Nonaktif</option>
-                        </select>
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-outline-secondary" type="submit">Filter</button>
                     </div>
-                    <div class="col-md-2">
-                        <button class="btn btn-outline-secondary btn-sm w-100">
-                            Filter
-                        </button>
-                    </div>
+                    @if (request('q'))
+                        <div class="col-auto">
+                            <a href="{{ route('master.customers.index') }}"
+                                class="btn btn-sm btn-link text-decoration-none">
+                                Reset
+                            </a>
+                        </div>
+                    @endif
                 </form>
             </div>
         </div>
 
-        {{-- Table --}}
-        <div class="card card-main">
+        <div class="card shadow-sm border-0">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr class="text-muted">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 60px;">#</th>
+                                <th>Kode</th>
                                 <th>Nama</th>
-                                <th style="width: 16%">Telepon</th>
-                                <th style="width: 18%">Email</th>
-                                <th style="width: 10%" class="text-center">Status</th>
-                                <th style="width: 16%" class="text-end">Aksi</th>
+                                <th>HP</th>
+                                <th>Kota</th>
+                                <th style="width: 160px;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse ($customers as $customer)
                                 <tr>
+                                    <td>{{ $loop->iteration + ($customers->currentPage() - 1) * $customers->perPage() }}
+                                    </td>
+                                    <td>{{ $customer->code ?? '-' }}</td>
+                                    <td>{{ $customer->name }}</td>
+                                    <td>{{ $customer->phone ?? '-' }}</td>
+                                    <td>{{ $customer->city ?? '-' }}</td>
                                     <td>
-                                        <div class="fw-semibold">
-                                            {{ $customer->name }}
+                                        <div class="d-flex gap-1">
+                                            <a href="{{ route('master.customers.edit', $customer) }}"
+                                                class="btn btn-sm btn-outline-primary">
+                                                Edit
+                                            </a>
+                                            <form action="{{ route('master.customers.destroy', $customer) }}"
+                                                method="POST" onsubmit="return confirm('Hapus customer ini?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button class="btn btn-sm btn-outline-danger" type="submit">
+                                                    Hapus
+                                                </button>
+                                            </form>
                                         </div>
-                                        @if ($customer->address)
-                                            <div class="small text-muted">
-                                                {{ Str::limit($customer->address, 60) }}
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td>{{ $customer->phone }}</td>
-                                    <td>{{ $customer->email }}</td>
-                                    <td class="text-center">
-                                        @if ($customer->active)
-                                            <span class="badge bg-success-subtle text-success">Aktif</span>
-                                        @else
-                                            <span class="badge bg-danger-subtle text-danger">Nonaktif</span>
-                                        @endif
-                                    </td>
-                                    <td class="text-end">
-                                        <a href="{{ route('customers.edit', $customer) }}"
-                                            class="btn btn-sm btn-outline-primary">
-                                            Edit
-                                        </a>
-
-                                        <form action="{{ route('customers.destroy', $customer) }}" method="POST"
-                                            class="d-inline" onsubmit="return confirm('Hapus customer ini?');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button class="btn btn-sm btn-outline-danger">
-                                                Hapus
-                                            </button>
-                                        </form>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted py-3">
-                                        Belum ada customer.
+                                    <td colspan="6" class="text-center text-muted py-3">
+                                        Belum ada data customer.
                                     </td>
                                 </tr>
                             @endforelse
                         </tbody>
                     </table>
                 </div>
-
-                <div class="px-3 py-2">
+                <div class="p-2">
                     {{ $customers->links() }}
                 </div>
             </div>
         </div>
-
     </div>
 @endsection

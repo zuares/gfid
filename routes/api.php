@@ -22,3 +22,8 @@ Route::prefix('api')
 
         // ... route api lain (stock, items, dll)
     });
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('customers', [ApiCustomerController::class, 'index'])
+        ->name('api.customers.index');
+});

@@ -1,7 +1,5 @@
 <?php
 
-// database/migrations/2025_12_04_140000_create_sales_invoices_table.php
-
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -13,29 +11,24 @@ return new class extends Migration
         Schema::create('sales_invoices', function (Blueprint $table) {
             $table->id();
 
-            $table->string('code', 50)->unique();
-            $table->dateTime('date');
+            $table->string('code')->unique(); // INV-YYYYMMDD-###
+            $table->date('date');
 
             $table->foreignId('customer_id')
                 ->nullable()
-                ->constrained('customers')
-                ->nullOnDelete();
-
-            $table->foreignId('marketplace_order_id')
-                ->nullable()
-                ->constrained('marketplace_orders')
+                ->constrained()
                 ->nullOnDelete();
 
             $table->foreignId('warehouse_id')
-                ->constrained('warehouses');
+                ->constrained()
+                ->cascadeOnDelete();
 
-            $table->enum('status', ['draft', 'posted', 'cancelled'])
-                ->default('draft');
+            $table->string('status')->default('draft'); // draft, posted
 
-            // Totals
-            $table->decimal('subtotal', 18, 2)->default(0); // total sebelum diskon header
-            $table->decimal('discount_total', 18, 2)->default(0); // diskon header
-            $table->decimal('tax_percent', 5, 2)->default(0); // contoh 0 / 11.00
+            // financial summary
+            $table->decimal('subtotal', 18, 2)->default(0);
+            $table->decimal('discount_total', 18, 2)->default(0);
+            $table->decimal('tax_percent', 5, 2)->default(0);
             $table->decimal('tax_amount', 18, 2)->default(0);
             $table->decimal('grand_total', 18, 2)->default(0);
 
@@ -49,9 +42,6 @@ return new class extends Migration
                 ->nullOnDelete();
 
             $table->timestamps();
-
-            $table->index('date');
-            $table->index('status');
         });
     }
 

@@ -61,10 +61,13 @@ class HppService
 
     /**
      * Hitung total HPP final (FG) dari semua komponen per unit.
+     *
+     * Komponen bisa berupa:
+     * ['rm' => .., 'cutting' => .., 'sewing' => .., 'finishing' => .., 'packaging' => .., 'overhead' => ..]
+     * atau array numeric biasa [rm, cutting, sewing, finishing, packaging, overhead]
      */
     public function calculateTotalHpp(array $components): float
     {
-        // components: ['rm' => .., 'cutting' => .., 'sewing' => .., 'finishing' => .., 'packaging' => .., 'overhead' => ..]
         $total = 0.0;
 
         foreach ($components as $value) {
@@ -77,16 +80,17 @@ class HppService
     /**
      * Simpan snapshot HPP satu item ke tabel item_cost_snapshots.
      *
-     * @param array $data
-     *   item_id (int)        → wajib
-     *   warehouse_id (int?)  → opsional, misal WH-PRD / WH-RTS
-     *   snapshot_date (string|\DateTimeInterface|null) → default: today
-     *   reference_type (string|null) → opsional, misal 'cutting_job', 'payroll_period'
-     *   reference_id (int|null)
-     *   qty_basis (float|null) → total qty yang jadi basis perhitungan (misal total FG yang dihasilkan)
-     *   rm_unit_cost, cutting_unit_cost, sewing_unit_cost,
-     *   finishing_unit_cost, packaging_unit_cost, overhead_unit_cost
-     *   notes (string|null)
+     * $data minimal berisi:
+     *  - item_id (int)
+     *  - warehouse_id (int|null)
+     *  - snapshot_date (string|\DateTimeInterface|null) → default: today
+     *  - reference_type (string|null)
+     *  - reference_id (int|null)
+     *  - qty_basis (float|null)
+     *  - rm_unit_cost, cutting_unit_cost, sewing_unit_cost,
+     *    finishing_unit_cost, packaging_unit_cost, overhead_unit_cost
+     *  - notes (string|null)
+     *  - is_active (bool|null) → default false
      */
     public function createSnapshot(array $data): ItemCostSnapshot
     {
@@ -99,7 +103,7 @@ class HppService
         $packaging = $this->num($data['packaging_unit_cost'] ?? 0);
         $overhead = $this->num($data['overhead_unit_cost'] ?? 0);
 
-        $total = $this->calculateTotalHpp([
+        $totalUnitCost = $this->calculateTotalHpp([
             $rm,
             $cutting,
             $sewing,
@@ -114,7 +118,9 @@ class HppService
         $snapshot->snapshot_date = $snapshotDate;
         $snapshot->reference_type = $data['reference_type'] ?? null;
         $snapshot->reference_id = $data['reference_id'] ?? null;
-        $snapshot->qty_basis = isset($data['qty_basis']) ? $this->num($data['qty_basis']) : null;
+
+        // qty_basis di DB NOT NULL + default 0, jadi aman kalau kita pakai 0 kalau nggak dikirim
+        $snapshot->qty_basis = $this->num($data['qty_basis'] ?? 0);
 
         $snapshot->rm_unit_cost = $rm;
         $snapshot->cutting_unit_cost = $cutting;
@@ -122,9 +128,12 @@ class HppService
         $snapshot->finishing_unit_cost = $finishing;
         $snapshot->packaging_unit_cost = $packaging;
         $snapshot->overhead_unit_cost = $overhead;
-        $snapshot->total_unit_cost = $total;
+
+        // 🧠 sesuai schema:  kolom total HPP per unit = `unit_cost`
+        $snapshot->unit_cost = $totalUnitCost;
 
         $snapshot->notes = $data['notes'] ?? null;
+        $snapshot->is_active = (bool) ($data['is_active'] ?? false);
         $snapshot->created_by = Auth::id();
 
         $snapshot->save();
@@ -169,5 +178,55 @@ class HppService
         }
 
         return now()->toDateString();
+    }
+
+    /**
+     * Ambil snapshot HPP aktif terbaru (tanpa peduli tanggal),
+     * misal buat info "HPP aktif saat ini".
+     */
+    public function getActiveSnapshotForItem(int $itemId, ?int $warehouseId = null): ?ItemCostSnapshot
+    {
+        return ItemCostSnapshot::query()
+            ->where('item_id', $itemId)
+            ->when($warehouseId, fn($q) => $q->where('warehouse_id', $warehouseId))
+            ->where('is_active', true)
+            ->orderByDesc('snapshot_date')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * Ambil snapshot HPP yang dipakai untuk penjualan per tanggal:
+     * - is_active = true
+     * - snapshot_date <= tanggal invoice
+     * - kalau banyak, ambil yang paling baru.
+     */
+    public function getSnapshotForSale(
+        int $itemId,
+        ?int $warehouseId,
+        string $saleDate,
+    ): ?ItemCostSnapshot {
+        return ItemCostSnapshot::query()
+            ->where('item_id', $itemId)
+            ->when($warehouseId, fn($q) => $q->where('warehouse_id', $warehouseId))
+            ->where('is_active', true)
+            ->whereDate('snapshot_date', '<=', $saleDate)
+            ->orderByDesc('snapshot_date')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * Helper: balikin angka HPP/unit untuk penjualan,
+     * default 0 kalau nggak ketemu snapshot.
+     */
+    public function getUnitCostForSale(
+        int $itemId,
+        ?int $warehouseId,
+        string $saleDate,
+    ): float {
+        $snap = $this->getSnapshotForSale($itemId, $warehouseId, $saleDate);
+
+        return $snap?->unit_cost ?? 0.0;
     }
 }

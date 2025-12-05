@@ -25,7 +25,9 @@ class DatabaseSeeder extends Seeder
             WarehouseSeeder::class,
             // DemoCuttingPayrollSeeder::class,
             PieceRateSeeder::class,
+            ProductionCostPeriodSeeder::class,
             // InventoryTransferDemoSeeder::class,
+
         ]);
     }
 }

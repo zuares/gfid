@@ -11,43 +11,52 @@ return new class extends Migration
         Schema::create('item_cost_snapshots', function (Blueprint $table) {
             $table->id();
 
-            // Item & gudang terkait (biasanya gudang FG / RTS)
+            // Item selesai (Finished Good)
             $table->unsignedBigInteger('item_id');
+
+            // Gudang opsional (misal WH-RTS)
             $table->unsignedBigInteger('warehouse_id')->nullable();
 
-            // Tanggal snapshot / effective date
+            // Tanggal snapshot
             $table->date('snapshot_date');
 
-            // Optional referensi (periode, job, dokumen)
-            $table->string('reference_type')->nullable(); // e.g. 'cutting_job', 'sewing_period', 'manual'
+            // Referensi pembuat snapshot
+            $table->string('reference_type')->nullable(); // auto_hpp_period, manual_adjustment, dll
             $table->unsignedBigInteger('reference_id')->nullable();
 
-            // Basis qty (misal total qty yang dihitung HPP-nya) – opsional
-            $table->decimal('qty_basis', 15, 3)->nullable();
+            // Qty basis HPP
+            $table->decimal('qty_basis', 14, 4)->default(0);
 
-            // Komponen HPP per unit (per pcs / meter / dsb)
-            $table->decimal('rm_unit_cost', 15, 4)->default(0); // kain / raw material
-            $table->decimal('cutting_unit_cost', 15, 4)->default(0); // biaya cutting per unit
-            $table->decimal('sewing_unit_cost', 15, 4)->default(0); // biaya sewing per unit
-            $table->decimal('finishing_unit_cost', 15, 4)->default(0); // finishing (press, trimming, dsb)
-            $table->decimal('packaging_unit_cost', 15, 4)->default(0); // polybag, hanger, label, dsb
-            $table->decimal('overhead_unit_cost', 15, 4)->default(0); // overhead lain (optional)
+            // Komponen biaya
+            $table->decimal('rm_unit_cost', 14, 4)->default(0);
+            $table->decimal('cutting_unit_cost', 14, 4)->default(0);
+            $table->decimal('sewing_unit_cost', 14, 4)->default(0);
+            $table->decimal('finishing_unit_cost', 14, 4)->default(0);
+            $table->decimal('packaging_unit_cost', 14, 4)->default(0);
+            $table->decimal('overhead_unit_cost', 14, 4)->default(0);
 
-            // Hasil total HPP per unit (RM + cutting + sewing + finishing + packaging + overhead)
-            $table->decimal('total_unit_cost', 15, 4);
+            // Total HPP final
+            $table->decimal('unit_cost', 14, 4)->default(0);
 
-            // Catatan tambahan
-            $table->text('notes')->nullable();
+            // Catatan
+            $table->string('notes')->nullable();
 
-            // Audit
+            // Active snapshot
+            $table->boolean('is_active')->default(false);
+
+            // Creator
             $table->unsignedBigInteger('created_by')->nullable();
+
             $table->timestamps();
 
-            // Index & FK
-            $table->foreign('item_id')->references('id')->on('items')->cascadeOnDelete();
-            $table->foreign('warehouse_id')->references('id')->on('warehouses')->nullOnDelete();
-            $table->index(['snapshot_date', 'item_id']);
-            $table->index(['reference_type', 'reference_id']);
+            // Index penting
+            $table->index(['item_id', 'warehouse_id']);
+            $table->index(['item_id', 'warehouse_id', 'is_active'], 'item_cost_snap_active_idx');
+
+            // Foreign keys (optional)
+            // $table->foreign('item_id')->references('id')->on('items')->onDelete('cascade');
+            // $table->foreign('warehouse_id')->references('id')->on('warehouses');
+            // $table->foreign('created_by')->references('id')->on('users');
         });
     }
 

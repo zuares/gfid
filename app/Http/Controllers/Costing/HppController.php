@@ -64,14 +64,24 @@ class HppController extends Controller
             $query->whereDate('snapshot_date', '<=', $filters['date_to']);
         }
 
-        // Pagination
+        // Pagination history snapshot
         $snapshots = $query->paginate(25)->withQueryString();
+
+        // 🔍 Ringkasan HPP aktif per item (opsional per gudang)
+        $activeSnapshots = ItemCostSnapshot::query()
+            ->with(['item', 'warehouse'])
+            ->where('is_active', true)
+            ->orderBy('item_id')
+            ->orderBy('warehouse_id')
+            ->orderByDesc('snapshot_date')
+            ->get();
 
         return view('costing.hpp.index', [
             'items' => $items,
             'warehouses' => $warehouses,
             'snapshots' => $snapshots,
             'filters' => $filters,
+            'activeSnapshots' => $activeSnapshots,
         ]);
     }
 

@@ -1,5 +1,4 @@
 <?php
-// database/migrations/xxxx_xx_xx_create_customers_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -11,12 +10,24 @@ return new class extends Migration
     {
         Schema::create('customers', function (Blueprint $table) {
             $table->id();
-            $table->string('name', 150);
-            $table->string('phone', 50)->nullable();
-            $table->string('email', 150)->nullable();
+            $table->string('code')->nullable()->unique(); // optional, kalau mau kasih kode customer
+            $table->string('name');
+            $table->string('phone')->nullable();
+            $table->string('email')->nullable();
             $table->text('address')->nullable();
-            $table->boolean('active')->default(true);
+            $table->string('city')->nullable();
+            $table->string('province')->nullable();
+            $table->string('postal_code')->nullable();
+            $table->text('notes')->nullable();
+
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+
             $table->timestamps();
+
+            // Kalau mau, boleh tambahkan foreign ke users:
+            // $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
+            // $table->foreign('updated_by')->references('id')->on('users')->nullOnDelete();
         });
     }
 

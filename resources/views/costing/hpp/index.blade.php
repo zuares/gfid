@@ -87,6 +87,15 @@
             --bs-btn-font-size: .72rem;
         }
 
+        .badge-global-hpp {
+            font-size: .7rem;
+            padding: .18rem .6rem;
+            border-radius: 999px;
+            font-weight: 600;
+            background: rgba(129, 140, 248, 0.12);
+            color: #4f46e5;
+        }
+
         @media (max-width: 767.98px) {
             .page-wrap {
                 padding-inline: .5rem;
@@ -241,6 +250,85 @@
             </div>
         </div>
 
+        {{-- DASHBOARD: RINGKASAN HPP AKTIF PER ITEM --}}
+        @isset($activeSnapshots)
+            @if ($activeSnapshots->isNotEmpty())
+                <div class="card card-main mb-3">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <h2 class="h6 mb-0">
+                                Ringkasan HPP Aktif per Item
+                            </h2>
+                            <span class="text-muted" style="font-size: .8rem;">
+                                {{ $activeSnapshots->count() }} snapshot aktif
+                            </span>
+                        </div>
+
+                        <div class="table-wrap">
+                            <table class="table table-sm mb-0 align-middle">
+                                <thead>
+                                    <tr class="text-nowrap">
+                                        <th>Item</th>
+                                        <th>Gudang</th>
+                                        <th>Tanggal HPP</th>
+                                        <th class="text-end">HPP / unit</th>
+                                        <th>Catatan</th>
+                                        <th style="width: 110px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($activeSnapshots as $snap)
+                                        <tr>
+                                            <td data-label="Item">
+                                                {{ $snap->item?->code ?? '-' }}<br>
+                                                <span class="text-muted small">
+                                                    {{ $snap->item?->name ?? '' }}
+                                                </span>
+                                            </td>
+                                            <td data-label="Gudang">
+                                                @if ($snap->warehouse)
+                                                    {{ $snap->warehouse->code }}<br>
+                                                    <span class="text-muted small">
+                                                        {{ $snap->warehouse->name }}
+                                                    </span>
+                                                @else
+                                                    <span class="badge-global-hpp">
+                                                        Global (tanpa gudang)
+                                                    </span>
+                                                @endif
+                                            </td>
+                                            <td data-label="Tanggal HPP" class="text-mono">
+                                                {{ \Illuminate\Support\Carbon::parse($snap->snapshot_date)->format('d M Y') }}
+                                            </td>
+                                            <td data-label="HPP / unit" class="text-end text-mono">
+                                                <span class="badge-hpp">
+                                                    {{ number_format($snap->unit_cost ?? 0, 2, ',', '.') }}
+                                                </span>
+                                            </td>
+                                            <td data-label="Catatan" class="small">
+                                                {{ $snap->notes ?: '-' }}
+                                            </td>
+                                            <td data-label="Aksi" class="text-end">
+                                                <a href="{{ route('costing.hpp.index', ['item_id' => $snap->item_id]) }}"
+                                                    class="btn btn-xs btn-outline-primary">
+                                                    Lihat riwayat
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            @else
+                <div class="alert alert-warning py-2 px-3 small mb-3">
+                    Belum ada snapshot HPP yang di-set sebagai <strong>HPP aktif</strong>. Setelah generate HPP, jangan
+                    lupa klik tombol <em>"Jadikan HPP Aktif"</em> di tabel history di bawah.
+                </div>
+            @endif
+        @endisset
+
         {{-- FILTER & HISTORY SNAPSHOT --}}
         <div class="card card-main">
             <div class="card-body">
@@ -362,8 +450,9 @@
                                     </td>
 
                                     @php
+                                        // gunakan kolom unit_cost dari DB; fallback kalau belum terisi
                                         $totalHpp =
-                                            $snap->total_unit_cost ??
+                                            $snap->unit_cost ??
                                             ($snap->rm_unit_cost ?? 0) +
                                                 ($snap->cutting_unit_cost ?? 0) +
                                                 ($snap->sewing_unit_cost ?? 0) +

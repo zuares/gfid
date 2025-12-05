@@ -3,171 +3,216 @@
 namespace App\Services\Costing;
 
 use App\Models\ItemCostSnapshot;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Auth;
+use App\Models\ProductionCostPeriod;
 
 class HppService
 {
     /**
-     * Hitung HPP Cutting dari total nilai RM / lot yang dipakai.
-     */
-    public function calculateCuttingHpp(
-        float | int | string $rmTotalCost,
-        float | int | string $totalQtyOk
-    ): float {
-        $rmTotalCost = $this->num($rmTotalCost);
-        $totalQtyOk = $this->num($totalQtyOk);
-
-        if ($totalQtyOk <= 0) {
-            throw new \RuntimeException('Qty OK harus > 0 untuk hitung HPP Cutting.');
-        }
-
-        return round($rmTotalCost / $totalQtyOk, 4);
-    }
-
-    /**
-     * HPP Sewing = HPP Cutting + biaya sewing (piece rate per unit).
-     */
-    public function calculateSewingHpp(
-        float | int | string $cuttingUnitCost,
-        float | int | string $sewingLaborPerUnit
-    ): float {
-        $cutting = $this->num($cuttingUnitCost);
-        $sewingLabor = $this->num($sewingLaborPerUnit);
-
-        return round($cutting + $sewingLabor, 4);
-    }
-
-    /**
-     * HPP Finishing = HPP Sewing + biaya finishing per unit.
-     */
-    public function calculateFinishingHpp(
-        float | int | string $sewingUnitCost,
-        float | int | string $finishingPerUnit
-    ): float {
-        $sewing = $this->num($sewingUnitCost);
-        $finishing = $this->num($finishingPerUnit);
-
-        return round($sewing + $finishing, 4);
-    }
-
-    /**
-     * HPP Packaging = biaya packaging per unit (langsung).
-     */
-    public function calculatePackagingHpp(float | int | string $packagingPerUnit): float
-    {
-        return round($this->num($packagingPerUnit), 4);
-    }
-
-    /**
-     * Hitung total HPP final (FG) dari semua komponen per unit.
-     */
-    public function calculateTotalHpp(array $components): float
-    {
-        // components: ['rm' => .., 'cutting' => .., 'sewing' => .., 'finishing' => .., 'packaging' => .., 'overhead' => ..]
-        $total = 0.0;
-
-        foreach ($components as $value) {
-            $total += $this->num($value);
-        }
-
-        return round($total, 4);
-    }
-
-    /**
-     * Simpan snapshot HPP satu item ke tabel item_cost_snapshots.
+     * Buat 1 snapshot HPP untuk FG.
      *
-     * @param array $data
-     *   item_id (int)        → wajib
-     *   warehouse_id (int?)  → opsional, misal WH-PRD / WH-RTS
-     *   snapshot_date (string|\DateTimeInterface|null) → default: today
-     *   reference_type (string|null) → opsional, misal 'cutting_job', 'payroll_period'
-     *   reference_id (int|null)
-     *   qty_basis (float|null) → total qty yang jadi basis perhitungan (misal total FG yang dihasilkan)
-     *   rm_unit_cost, cutting_unit_cost, sewing_unit_cost,
-     *   finishing_unit_cost, packaging_unit_cost, overhead_unit_cost
-     *   notes (string|null)
+     * Catatan:
+     * - Default is_active = false (snapshot historis / RM-only).
+     * - Kalau $setActive = true → akan otomatis memanggil setActiveSnapshot()
+     *   sehingga snapshot ini jadi HPP aktif (dan snapshot lain dinonaktifkan
+     *   sesuai aturan di setActiveSnapshot()).
      */
     public function createSnapshot(
         int $itemId,
         ?int $warehouseId,
         string $snapshotDate,
-        ?string $referenceType,
+        string $referenceType,
         ?int $referenceId,
-        ?float $qtyBasis,
-        ?float $rmUnitCost,
-        ?float $cuttingUnitCost,
-        ?float $sewingUnitCost,
-        ?float $finishingUnitCost,
-        ?float $packagingUnitCost,
-        ?float $overheadUnitCost,
+        float $qtyBasis,
+        float $rmUnitCost,
+        float $cuttingUnitCost,
+        float $sewingUnitCost,
+        float $finishingUnitCost,
+        float $packagingUnitCost,
+        float $overheadUnitCost,
         ?string $notes = null,
+        bool $setActive = false,
     ): ItemCostSnapshot {
-        $totalUnitCost =
-            ($rmUnitCost ?? 0) +
-            ($cuttingUnitCost ?? 0) +
-            ($sewingUnitCost ?? 0) +
-            ($finishingUnitCost ?? 0) +
-            ($packagingUnitCost ?? 0) +
-            ($overheadUnitCost ?? 0);
+        $unitCost = $rmUnitCost
+             + $cuttingUnitCost
+             + $sewingUnitCost
+             + $finishingUnitCost
+             + $packagingUnitCost
+             + $overheadUnitCost;
 
-        $snapshot = new ItemCostSnapshot();
-        $snapshot->item_id = $itemId;
-        $snapshot->warehouse_id = $warehouseId;
-        $snapshot->snapshot_date = $snapshotDate;
-        $snapshot->reference_type = $referenceType;
-        $snapshot->reference_id = $referenceId;
-        $snapshot->qty_basis = $qtyBasis;
-        $snapshot->rm_unit_cost = $rmUnitCost;
-        $snapshot->cutting_unit_cost = $cuttingUnitCost;
-        $snapshot->sewing_unit_cost = $sewingUnitCost;
-        $snapshot->finishing_unit_cost = $finishingUnitCost;
-        $snapshot->packaging_unit_cost = $packagingUnitCost;
-        $snapshot->overhead_unit_cost = $overheadUnitCost;
-        $snapshot->total_unit_cost = $totalUnitCost;
-        $snapshot->notes = $notes;
-        $snapshot->created_by = Auth::id();
-        $snapshot->save();
+        $snapshot = ItemCostSnapshot::create([
+            'item_id' => $itemId,
+            'warehouse_id' => $warehouseId,
+            'snapshot_date' => $snapshotDate,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'qty_basis' => $qtyBasis,
+            'rm_unit_cost' => $rmUnitCost,
+            'cutting_unit_cost' => $cuttingUnitCost,
+            'sewing_unit_cost' => $sewingUnitCost,
+            'finishing_unit_cost' => $finishingUnitCost,
+            'packaging_unit_cost' => $packagingUnitCost,
+            'overhead_unit_cost' => $overheadUnitCost,
+            'unit_cost' => $unitCost,
+            'notes' => $notes,
+            'is_active' => false, // default: non-aktif
+            'created_by' => auth()->id(),
+        ]);
+
+        if ($setActive) {
+            $this->setActiveSnapshot($snapshot);
+        }
 
         return $snapshot;
     }
 
     /**
-     * Helper: normalisasi angka (kayak di InventoryService::num()).
+     * Jadikan satu snapshot sebagai HPP aktif.
+     *
+     * - $exclusiveWithinType = true:
+     *   hanya menonaktifkan snapshot lain dengan item_id & reference_type sama.
+     *   (cocok untuk production_cost_period → HPP final per periode)
+     *
+     * - Kalau mau lebih agresif, kamu bisa ganti logic query di sini.
      */
-    protected function num(float | int | string | null $value): float
+    public function setActiveSnapshot(ItemCostSnapshot $snapshot, bool $exclusiveWithinType = true): void
     {
-        if ($value === null || $value === '') {
+        $query = ItemCostSnapshot::query()
+            ->where('item_id', $snapshot->item_id);
+
+        if ($exclusiveWithinType) {
+            $query->where('reference_type', $snapshot->reference_type);
+        }
+
+        if (!is_null($snapshot->warehouse_id)) {
+            $query->where('warehouse_id', $snapshot->warehouse_id);
+        }
+
+        $query->where('id', '!=', $snapshot->id)
+            ->update(['is_active' => false]);
+
+        $snapshot->is_active = true;
+        $snapshot->save();
+    }
+
+    /**
+     * Ambil snapshot "basis RM" untuk item tertentu.
+     *
+     * Prioritas:
+     *  1. Snapshot RM-only dari Finishing (auto_hpp_rm_only_finishing)
+     *  2. Fallback: snapshot lain (bukan production_cost_period) yang punya RM / unit_cost > 0
+     */
+    public function getRmBaseSnapshotForItem(int $itemId, string $dateTo): ?ItemCostSnapshot
+    {
+        // 1️⃣ coba pakai RM-only finishing
+        $rmOnly = ItemCostSnapshot::query()
+            ->where('item_id', $itemId)
+            ->where('reference_type', 'auto_hpp_rm_only_finishing')
+            ->whereDate('snapshot_date', '<=', $dateTo)
+            ->orderByDesc('snapshot_date')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($rmOnly) {
+            return $rmOnly;
+        }
+
+        // 2️⃣ fallback: snapshot lain yang punya nilai RM / unit_cost, tapi BUKAN dari production_cost_period
+        return ItemCostSnapshot::query()
+            ->where('item_id', $itemId)
+            ->where('reference_type', '!=', 'production_cost_period')
+            ->where(function ($q) {
+                $q->where('rm_unit_cost', '>', 0)
+                    ->orWhere('unit_cost', '>', 0);
+            })
+            ->whereDate('snapshot_date', '<=', $dateTo)
+            ->orderByDesc('snapshot_date')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * Ambil angka RM/unit saja (float) untuk dipakai di ProductionCostService.
+     */
+    public function getRmUnitCostForItem(int $itemId, string $dateTo): float
+    {
+        $snapshot = $this->getRmBaseSnapshotForItem($itemId, $dateTo);
+
+        if (!$snapshot) {
             return 0.0;
         }
 
-        if (is_int($value) || is_float($value)) {
-            return (float) $value;
-        }
-
-        $value = trim((string) $value);
-        $value = str_replace(' ', '', $value);
-
-        if (strpos($value, ',') !== false) {
-            // Format Indonesia: 1.234,56
-            $value = str_replace('.', '', $value);
-            $value = str_replace(',', '.', $value);
-            return (float) $value;
-        }
-
-        return (float) $value;
+        return (float) ($snapshot->rm_unit_cost ?? $snapshot->unit_cost ?? 0.0);
     }
 
-    protected function normalizeDate(string | \DateTimeInterface  | null $date): string
+    /**
+     * Ambil HPP final aktif untuk item (dipakai modul Sales, laporan laba rugi, dll).
+     *
+     * - Mengutamakan HPP dari ProductionCostPeriod yang is_active = true.
+     * - Kalau tidak ada, fallback ke snapshot is_active lain (legacy).
+     */
+    public function getActiveFinalHppForItem(int $itemId, ?int $warehouseId = null): ?ItemCostSnapshot
     {
-        if ($date instanceof \DateTimeInterface) {
-            return Carbon::instance($date)->toDateString();
+        // 1️⃣ cek periode costing aktif
+        $currentPeriod = ProductionCostPeriod::query()
+            ->where('is_active', true)
+            ->orderByDesc('snapshot_date')
+            ->orderByDesc('id')
+            ->first();
+
+        $query = ItemCostSnapshot::query()
+            ->where('item_id', $itemId)
+            ->where('is_active', true);
+
+        if ($currentPeriod) {
+            // batasi ke HPP final dari periode ini
+            $query->where('reference_type', 'production_cost_period')
+                ->where('reference_id', $currentPeriod->id);
+        } else {
+            // kalau tidak ada periode aktif, tetap utamakan yang dari production_cost_period
+            $query->where('reference_type', 'production_cost_period');
         }
 
-        if (is_string($date) && trim($date) !== '') {
-            return Carbon::parse($date)->toDateString();
+        if ($warehouseId) {
+            $query->where(function ($q) use ($warehouseId) {
+                $q->whereNull('warehouse_id')
+                    ->orWhere('warehouse_id', $warehouseId);
+            })->orderByDesc('warehouse_id');
         }
 
-        return now()->toDateString();
+        $snapshot = $query
+            ->orderByDesc('snapshot_date')
+            ->orderByDesc('id')
+            ->first();
+
+        // 2️⃣ fallback: kalau tidak ketemu (mis. sistem lama)
+        if (!$snapshot) {
+            $fallback = ItemCostSnapshot::query()
+                ->where('item_id', $itemId)
+                ->where('is_active', true);
+
+            if ($warehouseId) {
+                $fallback->where(function ($q) use ($warehouseId) {
+                    $q->whereNull('warehouse_id')
+                        ->orWhere('warehouse_id', $warehouseId);
+                })->orderByDesc('warehouse_id');
+            }
+
+            $snapshot = $fallback
+                ->orderByDesc('snapshot_date')
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        return $snapshot;
+    }
+
+    /**
+     * Backward-compatible helper:
+     * sebelumnya kamu pakai getActiveSnapshotForItem() sebagai pintu utama.
+     * Sekarang diarahkan ke getActiveFinalHppForItem().
+     */
+    public function getActiveSnapshotForItem(int $itemId, ?int $warehouseId = null): ?ItemCostSnapshot
+    {
+        return $this->getActiveFinalHppForItem($itemId, $warehouseId);
     }
 }

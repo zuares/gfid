@@ -1,25 +1,27 @@
 @extends('layouts.app')
 
-@section('title', 'Tambah Customer')
-
-@push('head')
-    {{-- pakai style sama dengan index --}}
-@endpush
+@section('title', 'Customer Baru')
 
 @section('content')
     <div class="page-wrap">
+        <h1 class="h4 mb-3">Customer Baru</h1>
 
-        <div class="mb-3">
-            <a href="{{ route('customers.index') }}" class="btn btn-sm btn-outline-secondary">
-                ← Kembali
-            </a>
+        @if ($errors->any())
+            <div class="alert alert-danger py-2 px-3 small">
+                <ul class="mb-0">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <form action="{{ route('master.customers.store') }}" method="POST" autocomplete="off">
+                    @include('master.customers._form', ['customer' => $customer])
+                </form>
+            </div>
         </div>
-
-        <form action="{{ route('customers.store') }}" method="POST">
-            @csrf
-
-            @include('customers._form')
-
-        </form>
     </div>
 @endsection

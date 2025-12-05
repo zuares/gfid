@@ -13,6 +13,7 @@ use App\Models\Item;
 use App\Models\SewingPickupLine;
 use App\Models\SewingReturnLine;
 use App\Models\Warehouse;
+use App\Services\Costing\HppService;
 use App\Services\Inventory\InventoryService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -24,9 +25,9 @@ use Illuminate\View\View;
 class FinishingJobController extends Controller
 {
     public function __construct(
-        protected InventoryService $inventory
-    ) {
-    }
+        protected InventoryService $inventory,
+        protected HppService $hpp,
+    ) {}
 
     /* ============================
      * INDEX
@@ -656,7 +657,7 @@ class FinishingJobController extends Controller
         }
 
         $wipFinWarehouseId = $warehouses['WIP-FIN']->id;
-        $prodWarehouseId = $warehouses['WH-PRD']->id; // ✅ gudang hasil produksi
+        $prodWarehouseId = $warehouses['WH-PRD']->id; // gudang hasil produksi
         $rejectWarehouseId = $warehouses['REJECT']->id;
 
         $date = $job->date instanceof \DateTimeInterface
@@ -669,15 +670,16 @@ class FinishingJobController extends Controller
         DB::transaction(function () use ($job, $wipFinWarehouseId, $prodWarehouseId, $rejectWarehouseId, $date) {
 
             foreach ($job->lines as $line) {
-                $qtyIn = (float) ($line->qty_in ?? 0);
-                $qtyOk = (float) ($line->qty_ok ?? 0);
-                $qtyReject = (float) ($line->qty_reject ?? 0);
+                $qtyIn = (float) ($line->qty_in ?? 0); // total proses (OK+Reject)
+                $qtyOk = (float) ($line->qty_ok ?? 0); // hasil OK (jadi WH-PRD)
+                $qtyReject = (float) ($line->qty_reject ?? 0); // hasil reject
 
                 if ($qtyIn <= 0 && $qtyOk <= 0 && $qtyReject <= 0) {
                     continue;
                 }
 
-                // 🔎 Ambil unit_cost rata-rata item ini di WIP-FIN
+                // Ambil unit_cost rata-rata item ini di WIP-FIN
+                // (ini RM + proses sebelumnya yang sudah menempel di WIP-FIN)
                 $unitCostWipFin = $this->inventory->getItemIncomingUnitCost(
                     warehouseId: $wipFinWarehouseId,
                     itemId: $line->item_id,
@@ -706,7 +708,7 @@ class FinishingJobController extends Controller
                 // ==== 2) IN ke WH-PRD: qty_ok ====
                 if ($qtyOk > 0) {
                     $this->inventory->stockIn(
-                        warehouseId: $prodWarehouseId, // ✅ bukan FG lagi
+                        warehouseId: $prodWarehouseId,
                         itemId: $line->item_id,
                         qty: $qtyOk,
                         date: $movementDate,
@@ -717,6 +719,29 @@ class FinishingJobController extends Controller
                         unitCost: $movementUnitCost,
                         affectLotCost: false,
                     );
+
+                    // 🎯 TRIGGER SNAPSHOT HPP RM-ONLY
+                    //    - ini hanya menyimpan RM/unit (plus proses sebelumnya),
+                    //    - tidak dipakai langsung untuk Sales (is_active = false)
+                    //    - nanti ProductionCostPeriod yang pakai sebagai basis RM.
+                    if ($movementUnitCost !== null && $movementUnitCost > 0) {
+                        $this->hpp->createSnapshot(
+                            itemId: $line->item_id,
+                            warehouseId: null, // RM base global (tidak spesifik gudang)
+                            snapshotDate: $movementDate->format('Y-m-d'),
+                            referenceType: 'auto_hpp_rm_only_finishing',
+                            referenceId: $job->id,
+                            qtyBasis: $qtyOk, // basis qty OK yang masuk WH-PRD
+                            rmUnitCost: $movementUnitCost, // HPP bahan baku per pcs (dari WIP-FIN)
+                            cuttingUnitCost: 0,
+                            sewingUnitCost: 0,
+                            finishingUnitCost: 0,
+                            packagingUnitCost: 0,
+                            overheadUnitCost: 0,
+                            notes: 'Auto HPP RM-only dari Finishing ' . $job->code,
+                            setActive: false, // ⬅️ RM-only TIDAK menjadi HPP aktif Sales
+                        );
+                    }
                 }
 
                 // ==== 3) IN ke REJECT: qty_reject ====
@@ -743,7 +768,6 @@ class FinishingJobController extends Controller
 
                     $newWipQty = $current - $used;
 
-                    // jaga-jaga floating error
                     if ($newWipQty < 0 && abs($newWipQty) > 0.0001) {
                         $newWipQty = 0;
                     }
@@ -766,137 +790,7 @@ class FinishingJobController extends Controller
 
         return redirect()
             ->route('production.finishing_jobs.show', $job->id)
-            ->with('status', 'Finishing Job berhasil diposting, stok & costing sudah dipindahkan dari WIP-FIN ke WH-PRD/REJECT.');
-    }
-    /* ============================
-     * UNPOST (FG + REJECT → WIP-FIN)
-     * ============================ */
-    public function unpost(FinishingJob $finishingJob): RedirectResponse
-    {
-        $job = $finishingJob;
-
-        if ($job->status !== 'posted') {
-            return back()->with('status', 'Finishing Job belum diposting, tidak bisa di-unpost.');
-        }
-
-        $warehouses = Warehouse::query()
-            ->whereIn('code', ['WIP-FIN', 'WH-PRD', 'REJECT'])
-            ->get()
-            ->keyBy('code');
-
-        if (!isset($warehouses['WIP-FIN'], $warehouses['WH-PRD'], $warehouses['REJECT'])) {
-            return back()->with('status', 'Warehouse WIP-FIN, WH-PRD, dan REJECT belum dikonfigurasi lengkap.');
-        }
-
-        $wipFinWarehouseId = $warehouses['WIP-FIN']->id;
-        $prodWarehouseId = $warehouses['WH-PRD']->id;
-        $rejectWarehouseId = $warehouses['REJECT']->id;
-
-        $date = $job->date instanceof \DateTimeInterface
-        ? $job->date
-        : Carbon::parse($job->date);
-
-        $inventory = $this->inventory;
-
-        try {
-            DB::transaction(function () use (
-                $job,
-                $inventory,
-                $wipFinWarehouseId,
-                $prodWarehouseId,
-                $rejectWarehouseId,
-                $date
-            ) {
-                // perlu bundle juga supaya bisa balikin wip_qty
-                $job->load(['lines.bundle']);
-
-                foreach ($job->lines as $line) {
-                    $qtyIn = (float) ($line->qty_in ?? 0);
-                    $qtyOk = (float) ($line->qty_ok ?? 0);
-                    $qtyReject = (float) ($line->qty_reject ?? 0);
-
-                    if ($qtyIn <= 0 && $qtyOk <= 0 && $qtyReject <= 0) {
-                        continue;
-                    }
-
-                    // 🔎 Ambil unit_cost dari WH-PRD sebagai estimasi cost yang akan balik ke WIP-FIN
-                    $unitCostFromProd = $inventory->getItemIncomingUnitCost(
-                        warehouseId: $prodWarehouseId,
-                        itemId: $line->item_id,
-                    );
-
-                    // 1) OUT dari WH-PRD: qty_ok
-                    if ($qtyOk > 0) {
-                        $inventory->stockOut(
-                            warehouseId: $prodWarehouseId,
-                            itemId: $line->item_id,
-                            qty: $qtyOk,
-                            date: $date,
-                            sourceType: FinishingJob::class,
-                            sourceId: $job->id,
-                            notes: 'Unpost Finishing OK ' . $job->code,
-                            allowNegative: false,
-                            lotId: null
-                        );
-                    }
-
-                    // 2) OUT dari REJECT: qty_reject
-                    if ($qtyReject > 0) {
-                        $inventory->stockOut(
-                            warehouseId: $rejectWarehouseId,
-                            itemId: $line->item_id,
-                            qty: $qtyReject,
-                            date: $date,
-                            sourceType: FinishingJob::class,
-                            sourceId: $job->id,
-                            notes: 'Unpost Finishing REJECT ' . $job->code,
-                            allowNegative: false,
-                            lotId: null
-                        );
-                    }
-
-                    // 3) IN kembali ke WIP-FIN: qty_in
-                    if ($qtyIn > 0) {
-                        $inventory->stockIn(
-                            warehouseId: $wipFinWarehouseId,
-                            itemId: $line->item_id,
-                            qty: $qtyIn,
-                            date: $date,
-                            sourceType: FinishingJob::class,
-                            sourceId: $job->id,
-                            notes: 'Unpost Finishing ' . $job->code,
-                            lotId: null,
-                            unitCost: $unitCostFromProd > 0 ? $unitCostFromProd : null,
-                        );
-                    }
-
-                    // 4) Balikin wip_qty bundle di WIP-FIN
-                    if ($qtyIn > 0 && $line->bundle) {
-                        $bundle = $line->bundle;
-                        $current = (float) ($bundle->wip_qty ?? 0);
-
-                        $bundle->wip_qty = $current + $qtyIn;
-                        $bundle->wip_warehouse_id = $wipFinWarehouseId;
-                        $bundle->save();
-                    }
-                }
-
-                $job->update([
-                    'status' => 'draft',
-                    'posted_at' => null,
-                    'unposted_at' => now(),
-                    'updated_by' => auth()->id(),
-                ]);
-            });
-        } catch (\Throwable $e) {
-            report($e);
-
-            return back()->with('status', 'Gagal unpost Finishing Job: ' . $e->getMessage());
-        }
-
-        return redirect()
-            ->route('production.finishing_jobs.show', $job->id)
-            ->with('status', 'Finishing Job berhasil di-unpost: stok & wip bundle sudah dikembalikan ke WIP-FIN dari WH-PRD/REJECT.');
+            ->with('status', 'Finishing Job berhasil diposting, stok & HPP RM-only sudah dipindahkan dari WIP-FIN ke WH-PRD/REJECT.');
     }
 
     public function reportPerItem(Request $request): View

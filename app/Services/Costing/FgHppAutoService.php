@@ -60,17 +60,17 @@ class FgHppAutoService
         $packagingUnitCost = 0.0;
         $overheadUnitCost = 0.0;
 
-        // 5) Basis qty: total qty OK sewing periode ini (bisa diubah kalau mau basis lain)
+        // 5) Basis qty: total qty OK sewing periode ini (konsisten dgn payroll sewing)
         $qtyBasis = $this->getFgQtyBasisFromSewingPayroll(
             finishedItemId: $itemId,
             dateFrom: $dateFrom,
             dateTo: $dateTo,
         );
 
-        // 6) Simpan snapshot
+        // 6) Simpan snapshot via HppService
         return $this->hpp->createSnapshot(
-            $itemId, // item
-            $warehouseId, // warehouse
+            $itemId, // item_id
+            $warehouseId, // warehouse_id
             $dateTo, // snapshot_date
             'auto_hpp_period', // reference_type
             null, // reference_id
@@ -78,12 +78,11 @@ class FgHppAutoService
             $rmUnitCost, // rm_unit_cost
             $cuttingUnitCost, // cutting_unit_cost
             $sewingUnitCost, // sewing_unit_cost
-            $finishingUnitCost, // finishing_unit_cost
-            $packagingUnitCost, // packaging_unit_cost
-            $overheadUnitCost, // overhead_unit_cost
+            $finishingUnitCost,
+            $packagingUnitCost,
+            $overheadUnitCost,
             $notes ?: "Auto HPP {$dateFrom} s/d {$dateTo}"// notes
         );
-
     }
 
     /**
@@ -101,7 +100,6 @@ class FgHppAutoService
         /** @var \Illuminate\Support\Collection<int, \App\Models\CuttingJobBundle> $bundles */
         $bundles = CuttingJobBundle::query()
             ->where('finished_item_id', $finishedItemId)
-        // relasi benar: cuttingJob (bukan job)
             ->whereHas('cuttingJob', function ($q) use ($dateFrom, $dateTo) {
                 $q->whereBetween('date', [$dateFrom, $dateTo]);
             })
@@ -116,13 +114,11 @@ class FgHppAutoService
         $totalFgOk = 0.0;
 
         foreach ($bundles as $bundle) {
-            // qty kain yang dipakai per bundle (meter/kg/yard, sesuai field kamu)
             $rmQty = (float) ($bundle->qty_used_fabric ?? 0);
             if ($rmQty <= 0) {
                 continue;
             }
 
-            // qty FG OK (pcs) — pakai accessor yg sudah kamu buat
             $fgOk = (float) $bundle->qty_cutting_ok;
             if ($fgOk <= 0) {
                 continue;
@@ -143,7 +139,6 @@ class FgHppAutoService
                 continue;
             }
 
-            // Ambil moving average cost LOT ini di gudang RM
             $lotCost = $this->inventory->getLotMovingAverageUnitCost(
                 warehouseId: $rmWarehouseId,
                 itemId: $rmItemId,
@@ -154,9 +149,7 @@ class FgHppAutoService
                 continue;
             }
 
-            // total cost kain yg dipakai
             $totalRmCost += $lotCost * $rmQty;
-            // total pcs OK FG
             $totalFgOk += $fgOk;
         }
 
@@ -164,14 +157,14 @@ class FgHppAutoService
             return 0.0;
         }
 
-        return round($totalRmCost / $totalFgOk, 4); // rupiah per pcs
+        return round($totalRmCost / $totalFgOk, 4); // Rupiah per pcs
     }
 
     /**
      * Hitung cost payroll Cutting per pcs:
-     * - PieceworkPayrollPeriod.module = 'cutting', status = 'posted'
-     * - period_start & period_end di dalam range (sederhana, bisa kamu tweak)
-     * - PieceworkPayrollLine.item_id = FG ini
+     * - PieceworkPayrollPeriod.module = 'cutting'
+     * - status = final/posted
+     * - periode overlapped dengan range yg diminta
      */
     private function calculateCuttingPayrollCostPerUnit(
         int $finishedItemId,
@@ -182,9 +175,9 @@ class FgHppAutoService
             ->where('item_id', $finishedItemId)
             ->whereHas('payrollPeriod', function ($q) use ($dateFrom, $dateTo) {
                 $q->where('module', 'cutting')
-                    ->whereIn('status', ['final', 'posted']) // ⬅️ penting: status final kamu dipakai
-                    ->whereDate('period_start', '<=', $dateTo) // overlap ke kanan
-                    ->whereDate('period_end', '>=', $dateFrom); // overlap ke kiri
+                    ->whereIn('status', ['final', 'posted'])
+                    ->whereDate('period_start', '<=', $dateTo)
+                    ->whereDate('period_end', '>=', $dateFrom);
             })
             ->get();
 
@@ -199,12 +192,14 @@ class FgHppAutoService
             return 0.0;
         }
 
-        return $totalAmount / $totalQty; // Rp / pcs
+        return $totalAmount / $totalQty; // Rp/pcs
     }
+
     /**
      * Hitung cost payroll Sewing per pcs:
-     * - PieceworkPayrollPeriod.module = 'sewing', status = 'posted'
-     * - PieceworkPayrollLine.item_id = FG ini
+     * - PieceworkPayrollPeriod.module = 'sewing'
+     * - status = final/posted
+     * - periode overlapped dgn range
      */
     private function calculateSewingPayrollCostPerUnit(
         int $finishedItemId,
@@ -236,8 +231,8 @@ class FgHppAutoService
     }
 
     /**
-     * Basis qty HPP = total qty OK Sewing dari payroll (module sewing) untuk FG ini.
-     * Supaya konsisten dengan upah per pcs yang kamu bayar.
+     * Basis qty HPP = total qty OK Sewing periode ini.
+     * Logika sama dgn calculateSewingPayrollCostPerUnit supaya konsisten.
      */
     protected function getFgQtyBasisFromSewingPayroll(
         int $finishedItemId,
@@ -248,9 +243,9 @@ class FgHppAutoService
             ->where('item_id', $finishedItemId)
             ->whereHas('payrollPeriod', function ($q) use ($dateFrom, $dateTo) {
                 $q->where('module', 'sewing')
-                    ->where('status', 'posted')
-                    ->whereDate('period_start', '>=', $dateFrom)
-                    ->whereDate('period_end', '<=', $dateTo);
+                    ->whereIn('status', ['final', 'posted'])
+                    ->whereDate('period_start', '<=', $dateTo)
+                    ->whereDate('period_end', '>=', $dateFrom);
             })
             ->get();
 
@@ -264,5 +259,4 @@ class FgHppAutoService
     ): float {
         return 0.0;
     }
-
 }

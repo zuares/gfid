@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\ItemCostSnapshot;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -117,6 +118,16 @@ class Item extends Model
             $q->where('warehouse_id', $warehouseId)
                 ->where('qty', '>', 0);
         });
+    }
+
+    public function activeCostSnapshot()
+    {
+        return $this->hasOne(ItemCostSnapshot::class, 'item_id')
+            ->active()
+            ->forCurrentCostPeriod() // pakai periode costing aktif kalau ada
+            ->orderByDesc('warehouse_id') // gudang spesifik lebih prioritas dari NULL
+            ->orderByDesc('snapshot_date')
+            ->orderByDesc('id');
     }
 
 }

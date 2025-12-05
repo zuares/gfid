@@ -12,21 +12,23 @@ return new class extends Migration
             $table->id();
 
             $table->foreignId('shipment_id')
+                ->constrained('shipments')
+                ->cascadeOnDelete();
+
+            // optional link ke invoice line (biar gampang cek sisa)
+            $table->foreignId('sales_invoice_line_id')
+                ->nullable()
+                ->constrained('sales_invoice_lines')
+                ->nullOnDelete();
+
+            $table->foreignId('item_id')
                 ->constrained()
                 ->cascadeOnDelete();
 
-            $table->foreignId('item_id')->constrained();
+            $table->integer('qty')->default(0); // qty dikirim
 
-            $table->integer('qty');
-
-            // Optional: lock HPP saat itu (kalau nanti mau dipakai untuk analisa)
-            $table->decimal('hpp_unit_snapshot', 18, 4)->default(0);
-
-            // Kalau nanti dikaitkan ke modul Sales Invoice
-            $table->foreignId('sales_invoice_line_id')
-                ->nullable()
-                ->constrained()
-                ->nullOnDelete();
+            // tempat catat hasil scan (optional)
+            $table->string('scan_code')->nullable();
 
             $table->text('remarks')->nullable();
 

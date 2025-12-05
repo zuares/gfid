@@ -134,10 +134,24 @@ class InventoryService
             // Kasus WIP: pakai unit_cost yang dikirim caller (misal avg WIP-CUT)
             $avgCost = $this->num($unitCostOverride);
             $totalCost = -($avgCost * $qty);
+
         } elseif ($lotId && $affectLotCost) {
             // Kasus kain mentah: pakai LotCost (avg cost per lot untuk RM)
             $avgCost = $this->lotCost->getAvgCost($lotId);
             $totalCost = -($avgCost * $qty);
+
+        } else {
+            // 🔥 Kasus FG / item tanpa LOT:
+            // pakai moving average cost berdasarkan mutasi IN di gudang ini
+            $avgCost = $this->getItemIncomingUnitCost($warehouseId, $itemId);
+
+            if ($avgCost !== 0.0) {
+                $totalCost = -($avgCost * $qty);
+            } else {
+                // kalau benar-benar belum ada cost IN, biarkan null
+                $avgCost = null;
+                $totalCost = null;
+            }
         }
 
         // CATAT MUTASI (OUT: qty_change -, total_cost -)
@@ -199,7 +213,16 @@ class InventoryService
             $lotId,
             &$mutations
         ) {
-            // keluar dulu dari gudang asal
+            // 🔹 Tentukan unit cost yang akan dibawa di transfer ini
+            if ($lotId) {
+                // Kalau ada LOT → pakai moving average per LOT
+                $unitCostForTransfer = $this->lotCost->getAvgCost($lotId);
+            } else {
+                // Kalau TIDAK pakai LOT (FG / WIP) → pakai avg cost incoming di gudang asal
+                $unitCostForTransfer = $this->getItemIncomingUnitCost($fromWarehouseId, $itemId);
+            }
+
+            // 1️⃣ OUT dari gudang asal
             $mutations['out'] = $this->stockOut(
                 warehouseId: $fromWarehouseId,
                 itemId: $itemId,
@@ -210,14 +233,11 @@ class InventoryService
                 notes: $notes,
                 allowNegative: $allowNegative,
                 lotId: $lotId,
+                unitCostOverride: $unitCostForTransfer, // ⬅️ pastikan total_cost OUT ikut nilai ini
+                affectLotCost: (bool) $lotId, // ⬅️ LotCost hanya diubah kalau pakai LOT
             );
 
-            // ambil avg cost LOT untuk masuk ke gudang tujuan
-            $unitCost = $lotId
-            ? $this->lotCost->getAvgCost($lotId)
-            : null;
-
-            // masuk ke gudang tujuan
+            // 2️⃣ IN ke gudang tujuan
             $mutations['in'] = $this->stockIn(
                 warehouseId: $toWarehouseId,
                 itemId: $itemId,
@@ -227,7 +247,8 @@ class InventoryService
                 sourceId: $sourceId,
                 notes: $notes,
                 lotId: $lotId,
-                unitCost: $unitCost
+                unitCost: $unitCostForTransfer ?: null, // kalau null/0, biarin kosong
+                affectLotCost: (bool) $lotId, // hanya pengaruhi LotCost kalau ada LOT
             );
         });
 

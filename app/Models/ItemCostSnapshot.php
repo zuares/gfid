@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 
 class ItemCostSnapshot extends Model
 {
@@ -23,24 +22,26 @@ class ItemCostSnapshot extends Model
         'finishing_unit_cost',
         'packaging_unit_cost',
         'overhead_unit_cost',
-        'total_unit_cost',
+        'unit_cost',
         'notes',
+        'is_active',
         'created_by',
     ];
 
     protected $casts = [
         'snapshot_date' => 'date',
-        'qty_basis' => 'float',
-        'rm_unit_cost' => 'float',
-        'cutting_unit_cost' => 'float',
-        'sewing_unit_cost' => 'float',
-        'finishing_unit_cost' => 'float',
-        'packaging_unit_cost' => 'float',
-        'overhead_unit_cost' => 'float',
-        'total_unit_cost' => 'float',
+        'qty_basis' => 'decimal:4',
+        'rm_unit_cost' => 'decimal:4',
+        'cutting_unit_cost' => 'decimal:4',
+        'sewing_unit_cost' => 'decimal:4',
+        'finishing_unit_cost' => 'decimal:4',
+        'packaging_unit_cost' => 'decimal:4',
+        'overhead_unit_cost' => 'decimal:4',
+        'unit_cost' => 'decimal:4',
+        'is_active' => 'boolean',
     ];
 
-    // RELATIONS
+    // Relations
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
@@ -56,62 +57,54 @@ class ItemCostSnapshot extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    // ACCESSOR: format total unit cost 2 desimal buat tampilan
-    public function getTotalUnitCostFormattedAttribute(): string
+    /**
+     * Snapshot ini terkait 1 ProductionCostPeriod
+     * (hanya kalau reference_type = 'production_cost_period').
+     */
+    public function productionCostPeriod()
     {
-        return number_format($this->total_unit_cost, 2);
+        return $this->belongsTo(ProductionCostPeriod::class, 'reference_id')
+            ->where('reference_type', 'production_cost_period');
     }
 
-    public function getRmUnitCostFormattedAttribute(): string
+    /** Scope: hanya snapshot yang ditandai aktif */
+    public function scopeActive($query)
     {
-        return number_format($this->rm_unit_cost, 2);
+        return $query->where('is_active', true);
     }
 
-    public function getCuttingUnitCostFormattedAttribute(): string
+    /**
+     * Scope: batasi ke periode costing yang sedang aktif (kalau ada).
+     * Kalau belum ada periode aktif → scope ini tidak membatasi apa-apa.
+     */
+    public function scopeForCurrentCostPeriod($query)
     {
-        return number_format($this->cutting_unit_cost, 2);
-    }
-
-    public function getSewingUnitCostFormattedAttribute(): string
-    {
-        return number_format($this->sewing_unit_cost, 2);
-    }
-
-    public function getFinishingUnitCostFormattedAttribute(): string
-    {
-        return number_format($this->finishing_unit_cost, 2);
-    }
-
-    public function getPackagingUnitCostFormattedAttribute(): string
-    {
-        return number_format($this->packaging_unit_cost, 2);
-    }
-
-    public function getOverheadUnitCostFormattedAttribute(): string
-    {
-        return number_format($this->overhead_unit_cost, 2);
-    }
-
-    public static function findEffectiveFor(
-        int $itemId,
-        string | \DateTimeInterface $date,
-        ?int $warehouseId = null,
-    ): ?self {
-        $dateString = $date instanceof \DateTimeInterface
-        ? Carbon::instance($date)->toDateString()
-        : Carbon::parse($date)->toDateString();
-
-        $q = static::query()
-            ->where('item_id', $itemId)
-            ->whereDate('snapshot_date', '<=', $dateString);
-
-        if ($warehouseId) {
-            $q->where('warehouse_id', $warehouseId);
-        }
-
-        return $q
+        $period = ProductionCostPeriod::query()
+            ->where('is_active', true)
             ->orderByDesc('snapshot_date')
             ->orderByDesc('id')
             ->first();
+
+        if ($period) {
+            $query->where('reference_type', 'production_cost_period')
+                ->where('reference_id', $period->id);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Scope: filter per gudang, tapi tetap izinkan HPP global (warehouse_id = NULL).
+     */
+    public function scopeForWarehouseOrGlobal($query, ?int $warehouseId)
+    {
+        if (!$warehouseId) {
+            return $query;
+        }
+
+        return $query->where(function ($q) use ($warehouseId) {
+            $q->whereNull('warehouse_id')
+                ->orWhere('warehouse_id', $warehouseId);
+        });
     }
 }

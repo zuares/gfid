@@ -1,193 +1,209 @@
 @extends('layouts.app')
 
-@section('title', 'Sales Invoice Baru')
+@section('title', 'Buat Sales Invoice')
+
 
 @push('head')
     <style>
-        .page-wrap {
-            max-width: 1200px;
-            margin-inline: auto;
-            padding: .75rem .75rem 4rem;
-        }
-
-        body[data-theme="light"] .page-wrap {
-            background: radial-gradient(circle at top left,
-                    rgba(59, 130, 246, 0.10) 0,
-                    rgba(45, 212, 191, 0.08) 26%,
-                    #f9fafb 60%);
-        }
-
-        .card-main {
+        .card-invoice {
             background: var(--card);
             border-radius: 14px;
-            border: 1px solid rgba(148, 163, 184, 0.30);
-            box-shadow:
-                0 10px 26px rgba(15, 23, 42, 0.06),
-                0 0 0 1px rgba(15, 23, 42, 0.03);
-        }
-
-        .table-items thead th {
-            font-size: .78rem;
-            text-transform: uppercase;
-            letter-spacing: .06em;
-            color: var(--muted);
-        }
-
-        .table-items input[type="text"],
-        .table-items input[type="number"] {
-            font-size: .82rem;
-        }
-
-        .btn-icon {
-            padding: .22rem .5rem;
-            font-size: .8rem;
-            line-height: 1;
+            border: 1px solid rgba(148, 163, 184, .35);
         }
     </style>
 @endpush
 
 @section('content')
-    <div class="page-wrap">
+    @php
+        $fmt = fn($n) => number_format($n ?? 0, 0, ',', '.');
+    @endphp
 
-        {{-- Back --}}
-        <div class="mb-3">
-            <a href="{{ route('sales.invoices.index') }}" class="btn btn-sm btn-outline-secondary">
-                ← Kembali ke List Invoice
-            </a>
-        </div>
+    <div class="container py-3">
+        <h4 class="mb-3">Buat Sales Invoice</h4>
 
-        <form action="{{ route('sales.invoices.store') }}" method="POST" id="si-form">
+        @if ($errors->any())
+            <div class="alert alert-danger py-2 px-3 small">
+                <ul class="mb-0 ps-3">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <form action="{{ route('sales.invoices.store') }}" method="POST" id="invoice-form">
             @csrf
 
             {{-- HEADER --}}
-            <div class="card card-main mb-3">
-                <div class="card-header fw-semibold">
-                    Sales Invoice Baru
-                </div>
+            <div class="card card-invoice mb-3">
                 <div class="card-body">
                     <div class="row g-3">
-
-                        {{-- Tanggal --}}
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold small">Tanggal Invoice</label>
-                            <input type="date" name="date"
-                                class="form-control form-control-sm @error('date') is-invalid @enderror"
+                        <div class="col-md-2">
+                            <label class="form-label">Tanggal</label>
+                            <input type="date" name="date" class="form-control form-control-sm"
                                 value="{{ old('date', now()->toDateString()) }}" required>
-                            @error('date')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
                         </div>
 
-                        {{-- Warehouse --}}
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold small">Warehouse</label>
-                            <select name="warehouse_id"
-                                class="form-select form-select-sm @error('warehouse_id') is-invalid @enderror" required>
-                                <option value="">- Pilih Warehouse -</option>
-                                @foreach ($warehouses as $wh)
-                                    <option value="{{ $wh->id }}" @selected(old('warehouse_id') == $wh->id)>
-                                        {{ $wh->code }} — {{ $wh->name }}
+                            <label class="form-label">Customer</label>
+                            <select name="customer_id" class="form-select form-select-sm">
+                                <option value="">– Tanpa customer –</option>
+                                @foreach ($customers as $c)
+                                    <option value="{{ $c->id }}" @selected(old('customer_id') == $c->id)>
+                                        {{ $c->name }}
                                     </option>
                                 @endforeach
                             </select>
-                            @error('warehouse_id')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            {{-- nanti bisa di-upgrade ke quick search --}}
                         </div>
 
-                        {{-- (optional) Kode invoice display (auto di backend) --}}
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold small">No. Invoice</label>
-                            <input type="text" class="form-control form-control-sm" value="(Auto generate)" disabled>
+                            <label class="form-label">Store / Channel</label>
+                            <select name="store_id" class="form-select form-select-sm">
+                                <option value="">– Tanpa Store –</option>
+                                @foreach ($stores as $s)
+                                    <option value="{{ $s->id }}" @selected(old('store_id') == $s->id)>
+                                        {{ $s->code }} — {{ $s->name }}
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
-                        {{-- Customer QUICK SEARCH --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small">Customer</label>
-
-                            <input type="hidden" name="customer_id" id="customer_id" value="{{ old('customer_id') }}">
-
-                            <div class="input-group input-group-sm mb-1">
-                                <input type="text" id="customer_search_input" class="form-control form-control-sm"
-                                    placeholder="Cari nama / telepon customer..." autocomplete="off">
-                                <button class="btn btn-outline-secondary" type="button"
-                                    onclick="window.open('{{ route('customers.index') }}', '_blank')">
-                                    List Customers
-                                </button>
-                            </div>
-
-                            <div class="small text-muted" id="customer_selected_info">
-                                @if (old('customer_id'))
-                                    Customer terpilih (ID: {{ old('customer_id') }})
-                                @else
-                                    Belum ada customer yang dipilih. Jika dikosongkan, data buyer bisa diisi manual (versi
-                                    lanjutan).
-                                @endif
-                            </div>
-
-                            <div class="mt-1" id="customer_suggest_box" style="display:none;">
-                                <div class="list-group list-group-flush border rounded-3 small"
-                                    style="max-height: 180px; overflow-y:auto;"></div>
-                            </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Warehouse</label>
+                            <select name="warehouse_id" class="form-select form-select-sm" required>
+                                @foreach ($warehouses as $w)
+                                    <option value="{{ $w->id }}" @selected(old('warehouse_id') == $w->id)>
+                                        {{ $w->code }} — {{ $w->name }}
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
-                        {{-- Catatan --}}
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small">Catatan</label>
-                            <textarea name="remarks" rows="2" class="form-control form-control-sm">{{ old('remarks') }}</textarea>
+                        <div class="col-md-2">
+                            <label class="form-label">PPN (%)</label>
+                            <input type="number" name="tax_percent" class="form-control form-control-sm text-end"
+                                value="{{ old('tax_percent', 0) }}" step="0.01" min="0" max="100">
                         </div>
 
+                        <div class="col-12">
+                            <label class="form-label">Catatan</label>
+                            <input type="text" name="remarks" class="form-control form-control-sm"
+                                value="{{ old('remarks') }}" placeholder="Catatan invoice (opsional)">
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {{-- ITEMS TABLE --}}
-            <div class="card card-main mb-3">
+            {{-- ITEMS --}}
+            <div class="card card-invoice mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span class="fw-semibold">Items</span>
-                    <button type="button" class="btn btn-sm btn-primary" id="btn-add-line">
-                        + Tambah Item
+                    <span>Items</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-row">
+                        + Tambah Baris
                     </button>
                 </div>
-
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0 table-items" id="items-table">
+                        <table class="table table-sm mb-0 align-middle" id="items-table">
                             <thead>
                                 <tr>
-                                    <th style="width: 32%;">Item</th>
-                                    <th style="width: 10%;" class="text-center">Qty</th>
-                                    <th style="width: 14%;" class="text-end">Harga</th>
-                                    <th style="width: 14%;" class="text-end">Diskon</th>
-                                    <th style="width: 14%;" class="text-end">Subtotal</th>
-                                    <th style="width: 8%;" class="text-center">Aksi</th>
+                                    <th style="width: 26%">Item</th>
+                                    <th style="width: 8%">Qty</th>
+                                    <th style="width: 13%">Harga</th>
+                                    <th style="width: 13%">Disc</th>
+                                    <th style="width: 13%">Subtotal</th>
+                                    <th style="width: 13%">HPP / pcs</th>
+                                    <th style="width: 13%">Margin</th>
+                                    <th style="width: 3%"></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {{-- baris akan di-generate via JS --}}
+                                {{-- row template pertama --}}
+                                <tr class="item-row">
+                                    <td>
+                                        <select name="items[0][item_id]" class="form-select form-select-sm select-item">
+                                            @foreach ($items as $i)
+                                                <option value="{{ $i->id }}"
+                                                    data-hpp="{{ (float) ($i->hpp_unit ?? 0) }}">
+                                                    {{ $i->code }} — {{ $i->name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" min="1" name="items[0][qty]"
+                                            class="form-control form-control-sm text-end input-qty"
+                                            value="{{ old('items.0.qty', 1) }}">
+                                    </td>
+                                    <td>
+                                        <input type="number" min="1" step="100" name="items[0][unit_price]"
+                                            class="form-control form-control-sm text-end input-price"
+                                            value="{{ old('items.0.unit_price', 0) }}" placeholder="Harga jual" required>
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" step="100" name="items[0][line_discount]"
+                                            class="form-control form-control-sm text-end input-disc"
+                                            value="{{ old('items.0.line_discount', 0) }}">
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="line-subtotal">0</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="line-hpp">0</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="line-margin">0</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row">
+                                            &times;
+                                        </button>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
-                </div>
 
-                {{-- Footer: total --}}
-                <div class="card-footer d-flex justify-content-between align-items-center">
-                    <div class="small text-muted">
-                        Minimal isi 1 item dengan qty > 0.
-                    </div>
-                    <div class="text-end">
-                        <div class="small text-muted mb-1">Subtotal</div>
-                        <div class="fw-bold fs-6" id="subtotal_display">
-                            Rp 0
+                    {{-- SUMMARY --}}
+                    <div class="p-3 border-top">
+                        <div class="row justify-content-end">
+                            <div class="col-md-5">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>Subtotal</span>
+                                    <strong><span id="summary-subtotal">0</span></strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1 align-items-center">
+                                    <span>Diskon header</span>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <input type="number" name="header_discount"
+                                            class="form-control form-control-sm text-end" id="input-header-discount"
+                                            value="{{ old('header_discount', 0) }}" step="100" min="0"
+                                            style="width: 120px;">
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>PPN</span>
+                                    <span id="summary-tax">0</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>Perkiraan Margin</span>
+                                    <span id="summary-margin">0</span>
+                                </div>
+                                <hr class="my-2">
+                                <div class="d-flex justify-content-between">
+                                    <span><strong>Grand Total</strong></span>
+                                    <strong><span id="summary-grand-total">0</span></strong>
+                                </div>
+                            </div>
                         </div>
-                        <input type="hidden" name="subtotal" id="subtotal_input" value="0">
                     </div>
+
                 </div>
             </div>
 
-            {{-- SUBMIT --}}
-            <div class="d-flex justify-content-end gap-2">
-                <button type="submit" class="btn btn-primary px-4">
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">
                     Simpan Invoice
                 </button>
             </div>
@@ -197,299 +213,180 @@
 
 @push('scripts')
     <script>
-        /**
-         * QUICK SEARCH CUSTOMER
-         * memakai endpoint: route('api.customers.suggest')
-         */
         (function() {
-            const input = document.getElementById('customer_search_input');
-            const hiddenId = document.getElementById('customer_id');
-            const info = document.getElementById('customer_selected_info');
-            const suggestBox = document.getElementById('customer_suggest_box');
-            const listContainer = suggestBox ? suggestBox.querySelector('.list-group') : null;
+            let rowIndex = 1;
 
-            if (!input || !hiddenId || !info || !suggestBox || !listContainer) return;
+            // Map item_id => HPP per unit dari PHP ke JS
+            const HPP_MAP = @json(
+                $items->mapWithKeys(function ($i) {
+                    return [$i->id => (float) ($i->hpp_unit ?? 0)];
+                }));
 
-            let timer = null;
+            const formatNumber = (num) => {
+                num = Number(num || 0);
+                return num.toLocaleString('id-ID', {
+                    maximumFractionDigits: 0
+                });
+            };
 
-            input.addEventListener('input', function() {
-                const q = input.value.trim();
+            const getRowItemId = (tr) => {
+                const sel = tr.querySelector('.select-item');
+                return sel ? sel.value : null;
+            };
 
-                clearTimeout(timer);
-                if (q.length < 2) {
-                    suggestBox.style.display = 'none';
-                    listContainer.innerHTML = '';
-                    return;
+            const recalcRow = (tr) => {
+                const qty = parseFloat(tr.querySelector('.input-qty').value || 0);
+                const price = parseFloat(tr.querySelector('.input-price').value || 0);
+                const disc = parseFloat(tr.querySelector('.input-disc').value || 0);
+
+                // Ambil HPP per unit dari map
+                const itemId = getRowItemId(tr);
+                let hppUnit = 0;
+                if (itemId && HPP_MAP[itemId]) {
+                    hppUnit = parseFloat(HPP_MAP[itemId]) || 0;
+                } else {
+                    // fallback ke data-hpp di option kalau ada
+                    const sel = tr.querySelector('.select-item');
+                    const opt = sel ? sel.selectedOptions[0] : null;
+                    if (opt && opt.dataset.hpp) {
+                        hppUnit = parseFloat(opt.dataset.hpp || 0);
+                    }
                 }
 
-                timer = setTimeout(() => fetchSuggest(q), 250);
+                let subtotal = (qty * price) - disc;
+                if (subtotal < 0) subtotal = 0;
+
+                const costTotal = hppUnit * qty;
+                const margin = subtotal - costTotal;
+
+                tr.querySelector('.line-subtotal').innerText = formatNumber(subtotal);
+                tr.querySelector('.line-hpp').innerText = formatNumber(hppUnit);
+                tr.querySelector('.line-margin').innerText = formatNumber(margin);
+
+                return {
+                    subtotal,
+                    margin
+                };
+            };
+
+            const recalcAll = () => {
+                const rows = document.querySelectorAll('#items-table tbody tr.item-row');
+                let subtotal = 0;
+                let totalMargin = 0;
+
+                rows.forEach(tr => {
+                    const res = recalcRow(tr);
+                    subtotal += res.subtotal;
+                    totalMargin += res.margin;
+                });
+
+                document.getElementById('summary-subtotal').innerText = formatNumber(subtotal);
+
+                const headerDiscountInput = document.getElementById('input-header-discount');
+                const headerDiscount = parseFloat(headerDiscountInput.value || 0);
+                let effectiveDisc = headerDiscount;
+                if (effectiveDisc > subtotal) {
+                    effectiveDisc = subtotal;
+                    headerDiscountInput.value = effectiveDisc;
+                }
+
+                const taxPercentInput = document.querySelector('input[name="tax_percent"]');
+                const taxPercent = parseFloat(taxPercentInput.value || 0);
+                const dpp = subtotal - effectiveDisc;
+                const tax = dpp * taxPercent / 100;
+                const grandTotal = dpp + tax;
+
+                document.getElementById('summary-tax').innerText = formatNumber(tax);
+                document.getElementById('summary-grand-total').innerText = formatNumber(grandTotal);
+                document.getElementById('summary-margin').innerText = formatNumber(totalMargin);
+            };
+
+            const tbody = document.querySelector('#items-table tbody');
+            const btnAddRow = document.getElementById('btn-add-row');
+
+            btnAddRow.addEventListener('click', () => {
+                const trLast = tbody.querySelector('tr.item-row:last-child');
+                const clone = trLast.cloneNode(true);
+
+                clone.querySelectorAll('select, input').forEach(el => {
+                    if (!el.name) return;
+
+                    el.name = el.name.replace(/\[\d+\]/, '[' + rowIndex + ']');
+
+                    if (el.classList.contains('input-qty')) {
+                        el.value = 1;
+                    } else if (el.classList.contains('input-price') || el.classList.contains(
+                            'input-disc')) {
+                        el.value = 0;
+                    } else if (el.classList.contains('select-item')) {
+                        el.selectedIndex = 0;
+                    }
+                });
+
+                clone.querySelector('.line-subtotal').innerText = '0';
+                clone.querySelector('.line-hpp').innerText = '0';
+                clone.querySelector('.line-margin').innerText = '0';
+
+                tbody.appendChild(clone);
+
+                rowIndex++;
+                recalcAll();
             });
 
-            function fetchSuggest(q) {
-                const url = `{{ route('api.customers.suggest') }}?q=${encodeURIComponent(q)}`;
+            // Perubahan qty/harga/discount
+            tbody.addEventListener('input', (e) => {
+                if (e.target.matches('.input-qty, .input-price, .input-disc')) {
+                    recalcAll();
+                }
+            });
 
-                fetch(url, {
-                        headers: {
-                            'Accept': 'application/json'
-                        }
-                    })
-                    .then(res => res.json())
-                    .then(json => {
-                        const items = json.data || [];
-                        listContainer.innerHTML = '';
+            // Perubahan item (ganti HPP & margin)
+            tbody.addEventListener('change', (e) => {
+                if (e.target.matches('.select-item')) {
+                    recalcAll();
+                }
+            });
 
-                        if (!items.length) {
-                            suggestBox.style.display = 'none';
-                            return;
-                        }
+            // Hapus baris
+            tbody.addEventListener('click', (e) => {
+                if (e.target.closest('.btn-remove-row')) {
+                    const rows = tbody.querySelectorAll('tr.item-row');
+                    if (rows.length <= 1) {
+                        // minimal 1 baris
+                        return;
+                    }
+                    e.target.closest('tr').remove();
+                    recalcAll();
+                }
+            });
 
-                        items.forEach(c => {
-                            const btn = document.createElement('button');
-                            btn.type = 'button';
-                            btn.className = 'list-group-item list-group-item-action';
-                            btn.innerHTML = `
-                        <div class="fw-semibold">${c.name}</div>
-                        <div class="small text-muted">
-                            ${c.phone ?? ''} ${c.email ? ' • ' + c.email : ''}
-                        </div>
-                    `;
-                            btn.addEventListener('click', () => {
-                                hiddenId.value = c.id;
-                                info.textContent =
-                                    `Customer terpilih: ${c.name}${c.phone ? ' (' + c.phone + ')' : ''}`;
-                                suggestBox.style.display = 'none';
-                                listContainer.innerHTML = '';
-                                input.value = '';
-                            });
-                            listContainer.appendChild(btn);
-                        });
+            // Header discount & tax
+            document.getElementById('input-header-discount').addEventListener('input', recalcAll);
+            document.querySelector('input[name="tax_percent"]').addEventListener('input', recalcAll);
 
-                        suggestBox.style.display = 'block';
-                    })
-                    .catch(err => console.error(err));
-            }
-        })();
-    </script>
-
-    <script>
-        /**
-         * ITEMS TABLE:
-         * - Tambah/hapus baris
-         * - Hitung subtotal per line dan total header
-         * - Item search (sederhana) lewat /api/items/suggest (silakan sesuaikan route-mu)
-         */
-        (function() {
-            const tableBody = document.querySelector('#items-table tbody');
-            const btnAdd = document.getElementById('btn-add-line');
-            const subtotalDisplay = document.getElementById('subtotal_display');
-            const subtotalInput = document.getElementById('subtotal_input');
-
-            let lineIndex = 0;
-
-            if (btnAdd) {
-                btnAdd.addEventListener('click', () => addLine());
-            }
-
-            // tambahkan 1–2 baris awal
-            addLine();
-            addLine();
-
-            function addLine() {
-                const idx = lineIndex++;
-                const tr = document.createElement('tr');
-                tr.dataset.index = idx;
-
-                tr.innerHTML = `
-            <td>
-                <input type="hidden" name="lines[${idx}][item_id]" class="item-id-input">
-                <input type="text"
-                       class="form-control form-control-sm item-search-input"
-                       placeholder="Cari item (kode / nama)..."
-                       autocomplete="off">
-                <div class="small text-muted item-selected-label mt-1"></div>
-                <div class="item-suggest-box mt-1" style="display:none;">
-                    <div class="list-group list-group-flush border rounded-3 small"
-                         style="max-height: 180px; overflow-y:auto;"></div>
-                </div>
-            </td>
-            <td class="text-center">
-                <input type="number"
-                       step="0.0001"
-                       min="0"
-                       name="lines[${idx}][qty]"
-                       class="form-control form-control-sm text-center qty-input"
-                       value="0">
-            </td>
-            <td class="text-end">
-                <input type="number"
-                       step="0.01"
-                       min="0"
-                       name="lines[${idx}][unit_price]"
-                       class="form-control form-control-sm text-end price-input"
-                       value="0">
-            </td>
-            <td class="text-end">
-                <input type="number"
-                       step="0.01"
-                       min="0"
-                       name="lines[${idx}][line_discount]"
-                       class="form-control form-control-sm text-end discount-input"
-                       value="0">
-            </td>
-            <td class="text-end">
-                <input type="text"
-                       readonly
-                       class="form-control form-control-sm text-end subtotal-line-input"
-                       value="0">
-            </td>
-            <td class="text-center">
-                <button type="button" class="btn btn-outline-danger btn-icon btn-remove-line">
-                    ✕
-                </button>
-            </td>
-        `;
-
-                tableBody.appendChild(tr);
-
-                attachLineEvents(tr);
-                recalcTotals();
-            }
-
-            function attachLineEvents(tr) {
-                const qtyInput = tr.querySelector('.qty-input');
-                const priceInput = tr.querySelector('.price-input');
-                const discountInput = tr.querySelector('.discount-input');
-                const removeBtn = tr.querySelector('.btn-remove-line');
-                const itemSearchInput = tr.querySelector('.item-search-input');
-
-                [qtyInput, priceInput, discountInput].forEach(input => {
-                    if (!input) return;
-                    input.addEventListener('input', () => recalcLine(tr));
+            // Validasi harga > 0 sebelum submit
+            const form = document.getElementById('invoice-form');
+            form.addEventListener('submit', (e) => {
+                let hasError = false;
+                const priceInputs = form.querySelectorAll('.input-price');
+                priceInputs.forEach((inp) => {
+                    const val = parseFloat(inp.value || 0);
+                    if (val <= 0) {
+                        hasError = true;
+                        inp.classList.add('is-invalid');
+                    } else {
+                        inp.classList.remove('is-invalid');
+                    }
                 });
 
-                if (removeBtn) {
-                    removeBtn.addEventListener('click', () => {
-                        tr.remove();
-                        recalcTotals();
-                    });
+                if (hasError) {
+                    e.preventDefault();
+                    alert('Harga jual tiap baris wajib lebih besar dari 0.');
                 }
+            });
 
-                // item search
-                if (itemSearchInput) {
-                    let timer = null;
-                    itemSearchInput.addEventListener('input', function() {
-                        const q = itemSearchInput.value.trim();
-
-                        clearTimeout(timer);
-                        if (q.length < 2) {
-                            hideItemSuggest(tr);
-                            return;
-                        }
-
-                        timer = setTimeout(() => fetchItemSuggest(tr, q), 250);
-                    });
-                }
-            }
-
-            function recalcLine(tr) {
-                const qty = parseFloat(tr.querySelector('.qty-input')?.value || '0');
-                const price = parseFloat(tr.querySelector('.price-input')?.value || '0');
-                const discount = parseFloat(tr.querySelector('.discount-input')?.value || '0');
-
-                let lineTotal = (qty * price) - discount;
-                if (lineTotal < 0) lineTotal = 0;
-
-                const subtotalInputLine = tr.querySelector('.subtotal-line-input');
-                if (subtotalInputLine) {
-                    subtotalInputLine.value = Math.round(lineTotal).toLocaleString('id-ID');
-                }
-
-                recalcTotals();
-            }
-
-            function recalcTotals() {
-                let subtotal = 0;
-
-                document.querySelectorAll('.subtotal-line-input').forEach(input => {
-                    // input line berisi string formatted, lebih aman ambil qty & price lagi
-                });
-
-                document.querySelectorAll('#items-table tbody tr').forEach(tr => {
-                    const qty = parseFloat(tr.querySelector('.qty-input')?.value || '0');
-                    const price = parseFloat(tr.querySelector('.price-input')?.value || '0');
-                    const discount = parseFloat(tr.querySelector('.discount-input')?.value || '0');
-                    let lineTotal = (qty * price) - discount;
-                    if (lineTotal < 0) lineTotal = 0;
-                    subtotal += lineTotal;
-                });
-
-                subtotalInput.value = subtotal.toFixed(2);
-                subtotalDisplay.textContent = 'Rp ' + Math.round(subtotal).toLocaleString('id-ID');
-            }
-
-            function fetchItemSuggest(tr, q) {
-                const box = tr.querySelector('.item-suggest-box');
-                const list = box?.querySelector('.list-group');
-                if (!box || !list) return;
-
-                const url = `/api/items/suggest?q=${encodeURIComponent(q)}&limit=20`; // sesuaikan dengan route API-mu
-
-                fetch(url, {
-                        headers: {
-                            'Accept': 'application/json'
-                        }
-                    })
-                    .then(res => res.json())
-                    .then(json => {
-                        const items = json.data || json; // sesuaikan structure response-mu
-                        list.innerHTML = '';
-
-                        if (!items.length) {
-                            box.style.display = 'none';
-                            return;
-                        }
-
-                        items.forEach(it => {
-                            const btn = document.createElement('button');
-                            btn.type = 'button';
-                            btn.className = 'list-group-item list-group-item-action';
-                            btn.innerHTML = `
-                        <div class="fw-semibold">${it.code ?? ''} — ${it.name}</div>
-                        <div class="small text-muted">
-                            ${it.item_category ?? ''} ${it.type ? '• ' + it.type : ''}
-                        </div>
-                    `;
-                            btn.addEventListener('click', () => {
-                                selectItem(tr, it);
-                                box.style.display = 'none';
-                                list.innerHTML = '';
-                            });
-                            list.appendChild(btn);
-                        });
-
-                        box.style.display = 'block';
-                    })
-                    .catch(err => console.error(err));
-            }
-
-            function hideItemSuggest(tr) {
-                const box = tr.querySelector('.item-suggest-box');
-                const list = box?.querySelector('.list-group');
-                if (!box || !list) return;
-                box.style.display = 'none';
-                list.innerHTML = '';
-            }
-
-            function selectItem(tr, it) {
-                const itemIdInput = tr.querySelector('.item-id-input');
-                const label = tr.querySelector('.item-selected-label');
-                const searchInput = tr.querySelector('.item-search-input');
-
-                if (itemIdInput) itemIdInput.value = it.id;
-                if (label) label.textContent = `${it.code ?? ''} — ${it.name}`;
-                if (searchInput) searchInput.value = '';
-            }
-
+            // initial calc
+            recalcAll();
         })();
     </script>
 @endpush
