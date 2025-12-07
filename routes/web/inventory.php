@@ -13,7 +13,10 @@ use App\Http\Controllers\Inventory\TransferController;
 // ======================================================================
 // Semua route ERP yang butuh login
 // ======================================================================
-Route::middleware(['web', 'auth'])->group(function () {
+
+// ========================= INVENTORY MAIN =========================
+// Hanya owner + operating (gudang produksi) yang boleh main inventory internal
+Route::middleware(['web', 'auth', 'role:owner,operating'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
@@ -78,18 +81,18 @@ Route::middleware(['web', 'auth'])->group(function () {
                     // INDEX
                     Route::get('/', [InventoryAdjustmentController::class, 'index'])->name('index');
 
-                    // MANUAL ADJUSTMENT (harus sebelum {inventoryAdjustment})
+                    // MANUAL ADJUSTMENT
                     Route::get('/manual/create', [InventoryAdjustmentController::class, 'createManual'])
                         ->name('manual.create');
 
                     Route::post('/manual', [InventoryAdjustmentController::class, 'storeManual'])
                         ->name('manual.store');
 
-                    // AJAX ITEMS (harus sebelum {inventoryAdjustment})
+                    // AJAX ITEMS
                     Route::get('/items', [InventoryAdjustmentController::class, 'itemsForWarehouse'])
                         ->name('items_for_warehouse');
 
-                    // DETAIL DOKUMEN (PALING BAWAH)
+                    // DETAIL DOKUMEN
                     Route::get('/{inventoryAdjustment}', [InventoryAdjustmentController::class, 'show'])
                         ->name('show');
                 });
@@ -97,18 +100,10 @@ Route::middleware(['web', 'auth'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | RTS & PRD STOCK REQUESTS
+    | PRD STOCK REQUESTS (Proses permintaan stok di gudang produksi)
+    | → owner + operating
     |--------------------------------------------------------------------------
      */
-    Route::prefix('rts/stock-requests')
-        ->name('rts.stock-requests.')
-        ->group(function () {
-            Route::get('/', [RtsStockRequestController::class, 'index'])->name('index');
-            Route::get('/create', [RtsStockRequestController::class, 'create'])->name('create');
-            Route::post('/', [RtsStockRequestController::class, 'store'])->name('store');
-            Route::get('/{stockRequest}', [RtsStockRequestController::class, 'show'])->name('show');
-        });
-
     Route::prefix('prd/stock-requests')
         ->name('prd.stock-requests.')
         ->group(function () {
@@ -117,12 +112,26 @@ Route::middleware(['web', 'auth'])->group(function () {
             Route::post('/{stockRequest}/process', [RtsStockRequestProcessController::class, 'update'])->name('update');
             Route::get('/{stockRequest}', [RtsStockRequestProcessController::class, 'show'])->name('show');
         });
+});
 
-    /*
-    |--------------------------------------------------------------------------
-    | API untuk dipakai di Blade (stok available + summary)
-    |--------------------------------------------------------------------------
-     */
+// ========================= RTS STOCK REQUESTS =========================
+// Permintaan stok dari RTS (gudang packing) → owner + admin
+Route::middleware(['web', 'auth', 'role:owner,admin'])->group(function () {
+
+    Route::prefix('rts/stock-requests')
+        ->name('rts.stock-requests.')
+        ->group(function () {
+            Route::get('/', [RtsStockRequestController::class, 'index'])->name('index');
+            Route::get('/create', [RtsStockRequestController::class, 'create'])->name('create');
+            Route::post('/', [RtsStockRequestController::class, 'store'])->name('store');
+            Route::get('/{stockRequest}', [RtsStockRequestController::class, 'show'])->name('show');
+        });
+});
+
+// ========================= STOCK API (Dipakai di banyak modul) =========================
+// Boleh diakses: owner + admin + operating
+Route::middleware(['web', 'auth', 'role:owner,admin,operating'])->group(function () {
+
     Route::prefix('api')
         ->name('api.')
         ->group(function () {

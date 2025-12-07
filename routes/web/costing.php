@@ -1,8 +1,16 @@
 <?php
+
 use App\Http\Controllers\Costing\HppController;
 use App\Http\Controllers\Costing\ProductionCostPeriodController;
 
-Route::middleware(['web', 'auth'])->group(function () {
+/*
+|--------------------------------------------------------------------------
+| HPP Finished Goods
+| Hanya bisa diakses oleh owner
+|--------------------------------------------------------------------------
+ */
+Route::middleware(['web', 'auth', 'role:owner'])->group(function () {
+
     Route::get('costing/hpp', [HppController::class, 'index'])
         ->name('costing.hpp.index');
 
@@ -13,19 +21,24 @@ Route::middleware(['web', 'auth'])->group(function () {
         ->name('costing.hpp.set_active');
 });
 
-// routes/web.php
-Route::middleware(['web', 'auth'])->group(function () {
+/*
+|--------------------------------------------------------------------------
+| Production Cost Periods
+| Hanya owner yang boleh atur periode costing & trigger generate HPP
+|--------------------------------------------------------------------------
+ */
+Route::middleware(['web', 'auth', 'role:owner'])->group(function () {
+
     Route::prefix('costing')->name('costing.')->group(function () {
 
-        // Resource: index, show, edit, update (kalau cuma itu yang dipakai)
         Route::resource('production-cost-periods', ProductionCostPeriodController::class)
             ->parameters([
-                'production-cost-periods' => 'period', // biar {period} ↔ model ProductionCostPeriod
+                'production-cost-periods' => 'period',
             ])
-            ->names('production_cost_periods') // 👈 hasilnya: costing.production_cost_periods.index, dst.
+            ->names('production_cost_periods')
             ->only(['index', 'show', 'edit', 'update']);
 
-        // Tombol "Generate HPP dari payroll" untuk 1 periode
+        // Generate HPP dari payroll untuk 1 periode
         Route::post('production-cost-periods/{period}/generate',
             [ProductionCostPeriodController::class, 'generate']
         )->name('production_cost_periods.generate');

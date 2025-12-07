@@ -7,7 +7,7 @@ use App\Http\Controllers\Sales\SalesInvoiceController;
 use App\Http\Controllers\Sales\ShipmentController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['web', 'auth'])->group(function () {
+Route::middleware(['web', 'auth', 'role:owner,admin'])->group(function () {
 
     Route::prefix('sales')->as('sales.')->group(function () {
 
@@ -17,12 +17,15 @@ Route::middleware(['web', 'auth'])->group(function () {
          * =========================
          */
 
+        // Buat invoice dari shipment
         Route::get('invoices/create-from-shipment/{shipment}', [SalesInvoiceController::class, 'createFromShipment'])
             ->name('invoices.create_from_shipment');
+
+        // Posting invoice
         Route::post('invoices/{invoice}/post', [SalesInvoiceController::class, 'post'])
             ->name('invoices.post');
-        // ⭐ NEW: Buat invoice dari Shipment
 
+        // Resource invoices (index, create, store, show, edit, update, destroy)
         Route::resource('invoices', SalesInvoiceController::class);
 
         /**

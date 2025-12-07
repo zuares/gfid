@@ -17,5 +17,4 @@ require __DIR__ . '/web/payroll.php';
 require __DIR__ . '/web/costing.php';
 require __DIR__ . '/web/marketplace.php';
 require __DIR__ . '/web/master.php';
-require __DIR__ . '/web/shipment.php';
 require __DIR__ . '/web/sales.php';

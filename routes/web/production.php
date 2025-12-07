@@ -9,7 +9,7 @@ use App\Http\Controllers\Production\SewingPickupController;
 use App\Http\Controllers\Production\SewingReportController;
 use App\Http\Controllers\Production\SewingReturnController;
 
-Route::middleware(['web', 'auth'])->group(function () {
+Route::middleware(['web', 'auth', 'role:owner,operating'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
@@ -61,7 +61,7 @@ Route::middleware(['web', 'auth'])->group(function () {
                     Route::put('/cutting/{cuttingJob}', [QcController::class, 'updateCutting'])
                         ->name('cutting.update');
 
-                    // (nanti bisa tambah qc.sewing.*, qc.packing.*, ...)
+                    // (nanti: qc.sewing.*, qc.packing.*, ...)
                 });
 
             /*
@@ -120,43 +120,32 @@ Route::middleware(['web', 'auth'])->group(function () {
                     ->name('reports.')
                     ->group(function () {
 
-                        // Operator dashboard summary
                         Route::get('/operators', [SewingReportController::class, 'operatorSummary'])
                             ->name('operators');
 
-                        // Not Yet Returned / Outstanding Report
                         Route::get('/outstanding', [SewingReportController::class, 'outstanding'])
                             ->name('outstanding');
 
-                        // Aging WIP-SEW
                         Route::get('/aging-wip-sew', [SewingReportController::class, 'agingWipSew'])
                             ->name('aging_wip_sew');
 
-                        // Productivity per Operator
                         Route::get('/productivity', [SewingReportController::class, 'productivity'])
                             ->name('productivity');
 
-                        // Partial Pickup Report
                         Route::get('/partial-pickup', [SewingReportController::class, 'partialPickup'])
                             ->name('partial_pickup');
 
-                        // Reject Sewing Analysis
                         Route::get('/reject-analysis', [SewingReportController::class, 'rejectAnalysis'])
                             ->name('report_reject');
 
-                        // Daily Sewing Dashboard
                         Route::get('/dashboard', [SewingReportController::class, 'dailyDashboard'])
                             ->name('dashboard');
 
-                        // Lead Time Sewing (Pickup → Return)
                         Route::get('/lead-time', [SewingReportController::class, 'leadTime'])
                             ->name('lead_time');
 
                         Route::get('/operator-behavior', [SewingReportController::class, 'operatorBehavior'])
                             ->name('operator_behavior');
-
-                        // ❌ DULU di sini ada item-chain pakai ProductionReportController
-                        //    Sekarang dipindah ke /production/reports (lihat di bawah).
                     });
             });
 
@@ -166,7 +155,6 @@ Route::middleware(['web', 'auth'])->group(function () {
         |--------------------------------------------------------------------------
          */
 
-            // Action khusus untuk POST & UNPOST (jalanin inventory)
             Route::post('finishing_jobs/{finishing_job}/post', [FinishingJobController::class, 'post'])
                 ->name('finishing_jobs.post');
 
@@ -179,11 +167,9 @@ Route::middleware(['web', 'auth'])->group(function () {
             Route::resource('finishing_jobs', FinishingJobController::class)
                 ->except(['destroy']);
 
-            // Report Finishing per Item (header)
             Route::get('finishing_jobs/report/per-item', [FinishingJobController::class, 'reportPerItem'])
                 ->name('finishing_jobs.report_per_item');
 
-            // Drilldown: detail per item → list finishing job
             Route::get('finishing_jobs/report/per-item/{item}', [FinishingJobController::class, 'reportPerItemDetail'])
                 ->name('finishing_jobs.report_per_item_detail');
 
@@ -192,8 +178,6 @@ Route::middleware(['web', 'auth'])->group(function () {
         | PACKING (status + WH-PRD)
         |--------------------------------------------------------------------------
          */
-
-            // Daftar item WH-PRD yang siap di-packing
             Route::get('packing/ready-items', [PackingJobController::class, 'readyItems'])
                 ->name('packing_jobs.ready_items');
 
@@ -217,29 +201,20 @@ Route::middleware(['web', 'auth'])->group(function () {
                 ->name('reports.')
                 ->group(function () {
 
-                    // 📅 Daily Production Summary
                     Route::get('daily-production', [ProductionReportController::class, 'dailyProduction'])
                         ->name('daily_production');
 
-                    // ❌ Reject Detail (Cutting + Sewing)
                     Route::get('reject-detail', [ProductionReportController::class, 'rejectDetail'])
                         ->name('reject_detail');
 
-                    // 🧵 WIP Sewing Age (versi report produksi, beda dari dashboard sewing)
                     Route::get('wip-sewing-age', [ProductionReportController::class, 'wipSewingAge'])
                         ->name('wip_sewing_age');
 
-                    // 🧵 Sewing per Item Jadi
                     Route::get('sewing-per-item', [ProductionReportController::class, 'sewingPerItem'])
                         ->name('sewing_per_item');
 
-                    // 🎯 Finishing Jobs Summary
                     Route::get('finishing-jobs', [ProductionReportController::class, 'finishingJobs'])
                         ->name('finishing_jobs');
-
-                    // (opsional nanti:) Cutting → Sewing Loss
-                    // Route::get('cutting-to-sewing-loss', [ProductionReportController::class, 'cuttingToSewingLoss'])
-                    //      ->name('cutting_to_sewing_loss');
                 });
         });
 });

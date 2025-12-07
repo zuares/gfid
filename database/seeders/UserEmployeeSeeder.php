@@ -18,7 +18,7 @@ class UserEmployeeSeeder extends Seeder
             [
                 'code' => 'OWN',
                 'name' => 'Owner',
-                'role' => 'owner',
+                'role' => 'owner', // ✅ masuk enum
                 'active' => 1,
                 'phone' => '081200000001',
                 'address' => 'Alamat Owner',
@@ -26,15 +26,23 @@ class UserEmployeeSeeder extends Seeder
             [
                 'code' => 'NTA',
                 'name' => 'Neng Nita',
-                'role' => 'admin',
+                'role' => 'admin', // ✅ ganti dari "fullfilment" → "admin"
                 'active' => 1,
                 'phone' => '081200000002',
-                'address' => 'Alamat Admin',
+                'address' => 'Alamat Admin / Fulfillment',
+            ],
+            [
+                'code' => 'ANG',
+                'name' => 'Angga',
+                'role' => 'operating', // ✅ ganti dari "production" → "operating"
+                'active' => 1,
+                'phone' => '081200000002',
+                'address' => 'Alamat Angga (Gudang Produksi)',
             ],
             [
                 'code' => 'MRF',
                 'name' => 'Mang Arip',
-                'role' => 'cutting',
+                'role' => 'cutting', // ✅ enum
                 'active' => 1,
                 'phone' => '081200000003',
                 'address' => 'Operator Cutting',
@@ -42,7 +50,7 @@ class UserEmployeeSeeder extends Seeder
             [
                 'code' => 'BBI',
                 'name' => 'Bi rini',
-                'role' => 'sewing',
+                'role' => 'sewing', // ✅ enum
                 'active' => 1,
                 'phone' => '081200000004',
                 'address' => 'Operator Sewing',
@@ -55,7 +63,6 @@ class UserEmployeeSeeder extends Seeder
                 'phone' => '081200000004',
                 'address' => 'Operator Sewing',
             ],
-
             [
                 'code' => 'RDN',
                 'name' => 'Jang ridwan',
@@ -70,13 +77,25 @@ class UserEmployeeSeeder extends Seeder
             $employee = Employee::create($emp);
 
             // ============================
-            //  AUTO GENERATE USER
+            //  TENTUKAN SIAPA YANG PUNYA LOGIN
             // ============================
+            // Hanya owner + admin + operating yang dibuat user
+            $loginRole = match ($employee->role) {
+                'owner' => 'owner',
+                'admin' => 'admin', // Nita → akses fulfillment / sales / packing
+                'operating' => 'operating', // Angga → akses production / inventory
+                default => null, // sewing, cutting, other → tidak dibuat user
+            };
+
+            if (!$loginRole) {
+                continue; // skip bikin user
+            }
+
             User::create([
                 'employee_id' => $employee->id,
                 'employee_code' => $employee->code,
                 'name' => $employee->name,
-                'role' => $employee->role,
+                'role' => $loginRole, // pastikan schema users.role juga support ini
                 'password' => Hash::make('123'), // default password
             ]);
         }
