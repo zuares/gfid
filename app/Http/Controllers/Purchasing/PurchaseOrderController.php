@@ -8,6 +8,7 @@ use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Services\Purchasing\PurchaseOrderService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class PurchaseOrderController extends Controller
 {
@@ -25,7 +26,7 @@ class PurchaseOrderController extends Controller
 
     public function index(Request $request)
     {
-        $q = PurchaseOrder::with('supplier')
+        $q = PurchaseOrder::with(['supplier', 'approvedBy', 'purchaseReceipts'])
             ->orderByDesc('date')
             ->orderByDesc('id');
 
@@ -104,6 +105,7 @@ class PurchaseOrderController extends Controller
         $data = $this->validateData($request);
 
         $data['created_by'] = $request->user()->id;
+        $data['status'] = 'draft'; // ⬅ selalu draft saat dibuat
 
         $order = $this->service->create($data);
 
@@ -120,7 +122,10 @@ class PurchaseOrderController extends Controller
         $purchase_order->load([
             'supplier',
             'lines.item',
-            'createdBy', // dipakai di view: $order->createdBy
+            'createdBy',
+            'approvedBy',
+            'cancelledBy',
+            'purchaseReceipts',
         ]);
 
         return view('purchasing.purchase_orders.show', [
@@ -136,6 +141,14 @@ class PurchaseOrderController extends Controller
      */
     public function edit(PurchaseOrder $purchase_order)
     {
+
+        // ⬅ blokir edit kalau status bukan draft
+        if ($purchase_order->status !== 'draft') {
+            return redirect()
+                ->route('purchasing.purchase_orders.show', $purchase_order->id)
+                ->with('error', 'PO yang sudah di-approve/cancel tidak bisa diedit.');
+        }
+
         // load detail + item
         $purchase_order->load(['lines.item']);
 
@@ -158,7 +171,14 @@ class PurchaseOrderController extends Controller
      */
     public function update(Request $request, PurchaseOrder $purchase_order)
     {
+        if ($purchase_order->status !== 'draft') {
+            return redirect()
+                ->route('purchasing.purchase_orders.show', $purchase_order->id)
+                ->with('error', 'PO yang sudah di-approve/cancel tidak bisa diubah.');
+        }
         $data = $this->validateData($request);
+        // jaga-jaga: jangan izinkan ganti status lewat update
+        $data['status'] = 'draft';
 
         // kirim ke service, termasuk status
         $order = $this->service->update($purchase_order, $data);
@@ -196,7 +216,6 @@ class PurchaseOrderController extends Controller
             'date' => ['required', 'date'],
             'supplier_id' => ['required', 'integer', 'exists:suppliers,id'],
             'shipping_cost' => ['nullable', 'string'],
-            'status' => ['required', 'in:draft,approved,cancelled'],
             'lines' => ['array'],
             'lines.*.item_id' => ['nullable', 'integer'],
             'lines.*.qty' => ['nullable', 'string'],
@@ -239,4 +258,42 @@ class PurchaseOrderController extends Controller
 
         return $data;
     }
+
+    public function approve(PurchaseOrder $purchase_order)
+    {
+        if ($purchase_order->status !== 'draft') {
+            return redirect()
+                ->route('purchasing.purchase_orders.show', $purchase_order->id)
+                ->with('error', 'PO yang bukan draft tidak bisa di-approve.');
+        }
+
+        $this->service->approve($purchase_order, auth()->id());
+
+        return redirect()
+            ->route('purchasing.purchase_orders.show', $purchase_order->id)
+            ->with('success', 'PO berhasil di-approve.');
+    }
+
+    public function cancel(PurchaseOrder $purchase_order)
+    {
+        // Double safety di controller: status + GRN
+        if (!in_array($purchase_order->status, ['draft', 'approved'], true)) {
+            return redirect()
+                ->route('purchasing.purchase_orders.show', $purchase_order->id)
+                ->with('error', 'PO ini sudah tidak bisa dibatalkan.');
+        }
+
+        if ($purchase_order->purchaseReceipts()->exists()) {
+            return redirect()
+                ->route('purchasing.purchase_orders.show', $purchase_order->id)
+                ->with('error', 'PO yang sudah punya GRN tidak boleh dibatalkan.');
+        }
+
+        $this->service->cancel($purchase_order, Auth::id());
+
+        return redirect()
+            ->route('purchasing.purchase_orders.show', $purchase_order->id)
+            ->with('success', 'PO berhasil dibatalkan.');
+    }
+
 }

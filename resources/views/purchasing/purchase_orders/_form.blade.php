@@ -20,7 +20,7 @@
     $statusOptions = [
         'draft' => 'Draft',
         'approved' => 'Approved',
-        'closed' => 'Closed',
+        'cancelled' => 'Cancelled',
     ];
     $statusValue = old('status', $order?->status ?? 'draft');
 
@@ -29,22 +29,265 @@
     $usingOldLines = $oldLines !== null;
 
     if ($usingOldLines) {
-        // setelah validation error, pakai apa adanya dari request
         $linesData = $oldLines;
     } elseif (isset($lines)) {
-        // dari controller (bisa Collection atau array)
         $linesData = is_array($lines) ? $lines : $lines->toArray();
     } else {
         $linesData = [];
     }
 @endphp
 
-<div class="card mb-3">
+@push('head')
+    <style>
+        /* ============================
+                   FORM PURCHASE – LAYOUT
+                ============================ */
+        .po-form-card {
+            background: var(--card);
+            border-radius: 14px;
+            border: 1px solid var(--line);
+        }
+
+        .po-lines-card {
+            background: var(--card);
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            overflow: hidden;
+        }
+
+        .po-lines-table thead th {
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            font-size: .75rem;
+            color: var(--muted);
+        }
+
+        .po-lines-table tbody td {
+            vertical-align: middle;
+        }
+
+        .po-lines-table tfoot th {
+            font-size: .85rem;
+        }
+
+        .po-subtotal-label {
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            font-size: .7rem;
+            color: var(--muted);
+        }
+
+        /* ============================
+                   MOBILE / TABLET TWEAKS (≤ 992px)
+                ============================ */
+        @media (max-width: 992px) {
+            .po-form-card {
+                border-radius: 14px;
+                padding-inline: .2rem;
+            }
+
+            .po-form-card .card-body {
+                padding: .85rem .9rem 1rem;
+            }
+
+            .po-form-card .form-label {
+                font-size: .8rem;
+                margin-bottom: .15rem;
+            }
+
+            .po-form-card .form-control,
+            .po-form-card .form-select {
+                font-size: .85rem;
+                padding-inline: .55rem;
+                padding-block: .35rem;
+            }
+
+            .po-lines-card {
+                border-radius: 16px;
+            }
+
+            .po-lines-card .card-header {
+                padding-inline: .9rem;
+                padding-block: .6rem;
+            }
+
+            .po-lines-card .card-header span {
+                font-size: .9rem;
+                font-weight: 600;
+            }
+
+            .po-lines-card .card-header .btn {
+                padding-block: .25rem;
+                padding-inline: .6rem;
+                font-size: .8rem;
+            }
+
+            /* TABLE → CARD PER BARIS */
+            .po-lines-table {
+                font-size: .85rem;
+            }
+
+            .po-lines-table thead {
+                display: none;
+            }
+
+            .po-lines-table tbody {
+                display: block;
+            }
+
+            .po-lines-table tbody tr {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                grid-template-areas:
+                    "header header"
+                    "item item"
+                    "qty price"
+                    "total total"
+                    "action action";
+                gap: .25rem .5rem;
+
+                max-width: 620px;
+                margin: 0 auto .7rem auto;
+                padding: .6rem .7rem .55rem;
+                border-radius: 14px;
+                border: 1px solid var(--line);
+                background: color-mix(in srgb, var(--card) 92%, var(--bg) 8%);
+                box-shadow:
+                    0 8px 18px rgba(15, 23, 42, 0.08),
+                    0 0 0 1px rgba(148, 163, 184, .12);
+            }
+
+            .po-lines-table tbody tr:last-child {
+                margin-bottom: .8rem;
+            }
+
+            .po-lines-table tbody td {
+                border: 0 !important;
+                padding: .1rem 0;
+            }
+
+            .po-lines-table tbody td[data-label]::before {
+                content: attr(data-label);
+                display: block;
+                font-size: .7rem;
+                text-transform: uppercase;
+                letter-spacing: .08em;
+                color: var(--muted);
+                margin-bottom: .05rem;
+            }
+
+            /* Header kecil: nomor baris */
+            .po-col-no {
+                grid-area: header;
+                display: block;
+                text-align: center;
+                font-weight: 600;
+                font-size: .9rem;
+                color: var(--muted);
+            }
+
+            .po-td-item {
+                grid-area: item;
+            }
+
+            .po-td-qty {
+                grid-area: qty;
+            }
+
+            .po-td-price {
+                grid-area: price;
+            }
+
+            /* Per-line TOTAL di mobile → less emphasis (biar fokus utama ke Subtotal) */
+            .po-td-total {
+                grid-area: total;
+                text-align: right;
+                font-weight: 500;
+                font-size: .9rem;
+                color: var(--muted);
+            }
+
+            .po-td-action {
+                grid-area: action;
+                text-align: center;
+                margin-top: .2rem;
+            }
+
+            .po-lines-table .form-control-sm {
+                font-size: .8rem;
+                padding-block: .25rem;
+                padding-inline: .45rem;
+            }
+
+            .po-lines-table .js-item-suggest-input {
+                font-size: .85rem;
+            }
+
+            /* Qty & Harga → input center di mobile */
+            .po-lines-table tbody .line-qty,
+            .po-lines-table tbody .line-price {
+                text-align: center !important;
+            }
+
+            .po-lines-table tbody td.po-td-action .btn {
+                padding-inline: .8rem;
+                padding-block: .3rem;
+                font-size: .8rem;
+                border-radius: 999px;
+            }
+
+            /* FOOTER SUBTOTAL DI MOBILE → FOCAL POINT */
+            #po-lines-table tfoot tr {
+                display: block;
+            }
+
+            #po-lines-table tfoot th {
+                display: inline-block;
+                width: 100%;
+                text-align: right;
+                padding: .35rem 1.2rem .5rem;
+            }
+
+            .po-subtotal-label {
+                display: block;
+                font-size: .7rem;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+                color: var(--muted);
+                margin-bottom: .05rem;
+            }
+
+            #po-subtotal-cell {
+                display: block;
+                font-size: 1.1rem;
+                font-weight: 700;
+                color: var(--text);
+            }
+        }
+
+        /* Default desktop: kolom No tetap table-cell */
+        @media (min-width: 993px) {
+            .po-col-no {
+                width: 5%;
+            }
+        }
+
+        /* Smooth scroll di HP */
+        .po-table-wrapper {
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+@endpush
+
+{{-- ============================
+     HEADER FORM (DATE / SUPPLIER / ONGKIR / STATUS)
+============================ --}}
+<div class="card mb-3 po-form-card">
     <div class="card-body">
         <div class="row g-3">
 
             {{-- TANGGAL --}}
-            <div class="col-md-3">
+            <div class="col-12 col-md-3">
                 <label class="form-label">Tanggal</label>
                 <input type="date" name="date" value="{{ $orderDate }}"
                     class="form-control @error('date') is-invalid @enderror">
@@ -54,7 +297,7 @@
             </div>
 
             {{-- SUPPLIER --}}
-            <div class="col-md-3">
+            <div class="col-12 col-md-3">
                 <label class="form-label">Supplier</label>
                 <select name="supplier_id" class="form-select @error('supplier_id') is-invalid @enderror">
                     @foreach ($suppliers as $sup)
@@ -69,7 +312,7 @@
             </div>
 
             {{-- ONGKIR --}}
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
                 <label class="form-label">Ongkir (Rp)</label>
                 <input type="text" name="shipping_cost" value="{{ $shippingCostInput }}"
                     class="form-control text-end @error('shipping_cost') is-invalid @enderror">
@@ -78,18 +321,24 @@
                 @enderror
             </div>
 
-            {{-- STATUS --}}
-            <div class="col-md-3">
+            {{-- STATUS (READONLY: select disabled + hidden input) --}}
+            <div class="col-6 col-md-3">
                 <label class="form-label">Status</label>
-                <select name="status" class="form-select @error('status') is-invalid @enderror">
+
+                {{-- hidden yang dikirim ke server --}}
+                <input type="hidden" name="status" value="{{ $statusValue }}">
+
+                {{-- Select hanya untuk tampilan --}}
+                <select class="form-select" disabled>
                     @foreach ($statusOptions as $key => $label)
                         <option value="{{ $key }}" @selected($statusValue === $key)>
                             {{ $label }}
                         </option>
                     @endforeach
                 </select>
+
                 @error('status')
-                    <div class="invalid-feedback">{{ $message }}</div>
+                    <div class="invalid-feedback d-block">{{ $message }}</div>
                 @enderror
             </div>
 
@@ -97,8 +346,10 @@
     </div>
 </div>
 
-{{-- DETAIL --}}
-<div class="card">
+{{-- ============================
+     DETAIL BARANG
+============================ --}}
+<div class="card po-lines-card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>Detail Barang</span>
         <button type="button" id="btn-add-line" class="btn btn-sm btn-outline-primary">
@@ -106,11 +357,11 @@
         </button>
     </div>
 
-    <div class="table-responsive">
-        <table class="table table-sm mb-0" id="po-lines-table">
+    <div class="table-responsive po-table-wrapper">
+        <table class="table table-sm mb-0 po-lines-table" id="po-lines-table">
             <thead class="table-light">
                 <tr>
-                    <th style="width:5%">No</th>
+                    <th class="po-col-no text-center">No</th>
                     <th style="width:40%">Item</th>
                     <th class="text-end" style="width:15%">Qty</th>
                     <th class="text-end" style="width:20%">Harga</th>
@@ -126,24 +377,19 @@
                         $linePriceRaw = $line['unit_price'] ?? '';
                         $lineItemId = $line['item_id'] ?? ($line['item']['id'] ?? null);
 
-                        // qty: pakai apa adanya (old() atau DB)
                         $lineQty = $lineQtyRaw;
-
-                        // unit_price:
-                        // - kalau dari old('lines') → jangan diformat lagi
-                        // - kalau dari DB          → boleh diformat angka()
                         $linePrice = $usingOldLines ? $linePriceRaw : angka($linePriceRaw);
 
-                        // display awal di input (mini → cuma kode cukup)
                         $itemCode = $line['item']['code'] ?? null;
                         $itemDisplay = $itemCode ?? '';
                     @endphp
 
                     <tr>
-                        <td class="text-center align-middle line-index">{{ $loop->iteration }}</td>
+                        {{-- HEADER (mobile) / No (desktop) --}}
+                        <td class="text-center align-middle line-index po-col-no">{{ $loop->iteration }}</td>
 
-                        {{-- ITEM pakai item-suggest (varian mini) --}}
-                        <td>
+                        {{-- ITEM --}}
+                        <td class="po-td-item" data-label="Item">
                             <x-item-suggest :items="$items" idName="lines[{{ $i }}][item_id]"
                                 :idValue="$lineItemId" :displayValue="$itemDisplay" type="material" variant="mini" :minChars="1" />
                             @error("lines.$i.item_id")
@@ -151,7 +397,8 @@
                             @enderror
                         </td>
 
-                        <td>
+                        {{-- Qty --}}
+                        <td data-label="Qty" class="po-td-qty">
                             <input type="text" name="lines[{{ $i }}][qty]" value="{{ $lineQty }}"
                                 class="form-control form-control-sm text-end line-qty">
                             @error("lines.$i.qty")
@@ -159,7 +406,8 @@
                             @enderror
                         </td>
 
-                        <td>
+                        {{-- Harga --}}
+                        <td data-label="Harga (Rp)" class="po-td-price">
                             <input type="text" name="lines[{{ $i }}][unit_price]"
                                 value="{{ $linePrice }}" class="form-control form-control-sm text-end line-price">
                             @error("lines.$i.unit_price")
@@ -167,42 +415,47 @@
                             @enderror
                         </td>
 
-                        <td class="text-end align-middle line-total"></td>
+                        {{-- TOTAL --}}
+                        <td class="text-end align-middle line-total po-td-total" data-label="Total (Rp)"></td>
 
-                        <td class="text-center">
-                            <button type="button"
-                                class="btn btn-sm btn-outline-danger btn-remove-line">&times;</button>
+                        {{-- ACTION --}}
+                        <td class="text-center po-td-action">
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-line">
+                                {{-- Mobile / tablet: teks, Desktop: ikon --}}
+                                <span class="d-inline d-lg-none">Hapus baris</span>
+                                <span class="d-none d-lg-inline">&times;</span>
+                            </button>
                         </td>
                     </tr>
 
                 @empty
                     {{-- DEFAULT 1 ROW --}}
                     <tr>
-                        <td class="text-center align-middle line-index">1</td>
+                        <td class="text-center align-middle line-index po-col-no">1</td>
 
-                        <td>
-                            {{-- <x-item-suggest :items="$items" idName="lines[0][item_id]" type="material" variant="mini"
-                                :minChars="1" /> --}}
+                        <td class="po-td-item" data-label="Item">
                             <x-item-suggest idName="lines[0][item_id]" :items="$items" displayMode="code-name"
-                                :showName="true" :showCategory="false" {{-- baris kedua: tanpa kategori --}} type="material"
-                                placeholder="Cari kode / nama item" placeholder="Masukan Kode Barang" />
+                                :showName="true" :showCategory="false" type="material"
+                                placeholder="Masukan kode / nama barang" />
                         </td>
 
-                        <td>
+                        <td data-label="Qty" class="po-td-qty">
                             <input type="text" name="lines[0][qty]"
                                 class="form-control form-control-sm text-end line-qty">
                         </td>
 
-                        <td>
+                        <td data-label="Harga (Rp)" class="po-td-price">
                             <input type="text" name="lines[0][unit_price]"
                                 class="form-control form-control-sm text-end line-price">
                         </td>
 
-                        <td class="text-end align-middle line-total"></td>
+                        <td class="text-end align-middle line-total po-td-total" data-label="Total (Rp)"></td>
 
-                        <td class="text-center">
-                            <button type="button"
-                                class="btn btn-sm btn-outline-danger btn-remove-line">&times;</button>
+                        <td class="text-center po-td-action">
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-line">
+                                <span class="d-inline d-lg-none">Hapus baris</span>
+                                <span class="d-none d-lg-inline">&times;</span>
+                            </button>
                         </td>
                     </tr>
                 @endforelse
@@ -210,12 +463,19 @@
 
             <tfoot class="table-light">
                 <tr>
-                    <th colspan="4" class="text-end">Subtotal</th>
+                    <th colspan="4" class="text-end po-subtotal-label">Subtotal</th>
                     <th class="text-end" id="po-subtotal-cell"></th>
                     <th></th>
                 </tr>
             </tfoot>
         </table>
+    </div>
+
+    {{-- Tombol tambah baris di bawah (khusus mobile / tablet) --}}
+    <div class="d-block d-lg-none text-center py-2">
+        <button type="button" id="btn-add-line-bottom" class="btn btn-outline-primary btn-sm">
+            + Tambah Baris
+        </button>
     </div>
 </div>
 
@@ -223,25 +483,23 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const tableBody = document.querySelector('#po-lines-table tbody');
-            const btnAdd = document.getElementById('btn-add-line');
+            const btnAddTop = document.getElementById('btn-add-line');
+            const btnAddBottom = document.getElementById('btn-add-line-bottom');
             const subtotalCell = document.getElementById('po-subtotal-cell');
+            const shippingInput = document.querySelector('input[name="shipping_cost"]');
 
             function parseNumber(value) {
                 if (!value) return 0;
                 value = value.toString().trim();
-
-                // hilangkan spasi
                 value = value.replace(/\s+/g, '');
 
-                // Kalau ada koma → format Indonesia "1.234,56"
                 if (value.indexOf(',') !== -1) {
-                    value = value.replace(/\./g, ''); // hilangkan titik ribuan
-                    value = value.replace(',', '.'); // koma → titik desimal
+                    value = value.replace(/\./g, '');
+                    value = value.replace(',', '.');
                     const n = parseFloat(value);
                     return isNaN(n) ? 0 : n;
                 }
 
-                // Kalau tidak ada koma tapi ada titik dan pola ribuan "1.234" / "1.234.567"
                 if (/^\d{1,3}(\.\d{3})+$/.test(value)) {
                     value = value.replace(/\./g, '');
                     const n = parseFloat(value);
@@ -257,6 +515,15 @@
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 0,
                 }).format(isNaN(value) ? 0 : value);
+            }
+
+            function formatInputOnBlur(el) {
+                const num = parseNumber(el.value);
+                if (!num) {
+                    el.value = '';
+                    return;
+                }
+                el.value = formatNumberId(num);
             }
 
             function recalcRow(tr) {
@@ -291,11 +558,9 @@
             function renumberLines() {
                 const rows = tableBody.querySelectorAll('tr');
                 rows.forEach(function(tr, index) {
-                    // Update index tampilan
                     const idxCell = tr.querySelector('.line-index');
                     if (idxCell) idxCell.textContent = index + 1;
 
-                    // Update name attribute sesuai index
                     tr.querySelectorAll('input, select').forEach(function(el) {
                         const name = el.getAttribute('name');
                         if (!name) return;
@@ -307,16 +572,16 @@
                 });
             }
 
-            btnAdd?.addEventListener('click', function() {
+            function addNewRow() {
                 const lastRow = tableBody.querySelector('tr:last-child');
                 const newRow = lastRow.cloneNode(true);
 
-                // reset value input qty / price
+                // reset qty & harga
                 newRow.querySelectorAll('.line-qty, .line-price').forEach(function(input) {
                     input.value = '';
                 });
 
-                // reset item-suggest (display + hidden id/category)
+                // reset item-suggest
                 newRow.querySelectorAll('.js-item-suggest-input').forEach(function(input) {
                     input.value = '';
                 });
@@ -327,11 +592,9 @@
                     hidden.value = '';
                 });
 
-                // reset total
                 const totalCell = newRow.querySelector('.line-total');
                 if (totalCell) totalCell.textContent = '';
 
-                // supaya initItemSuggestInputs bisa detect ini row baru lagi
                 newRow.querySelectorAll('.item-suggest-wrap').forEach(function(wrap) {
                     wrap.removeAttribute('data-suggest-inited');
                 });
@@ -340,17 +603,23 @@
                 renumberLines();
                 recalcAll();
 
-                // INIT item-suggest untuk row baru
                 if (window.initItemSuggestInputs) {
                     window.initItemSuggestInputs(newRow);
                 }
-            });
+            }
+
+            btnAddTop?.addEventListener('click', addNewRow);
+            btnAddBottom?.addEventListener('click', addNewRow);
 
             tableBody.addEventListener('click', function(e) {
-                if (e.target.classList.contains('btn-remove-line')) {
+                if (e.target.classList.contains('btn-remove-line') ||
+                    e.target.closest('.btn-remove-line')) {
+
+                    const btn = e.target.closest('.btn-remove-line');
+                    if (!btn) return;
+
                     const rows = tableBody.querySelectorAll('tr');
                     if (rows.length <= 1) {
-                        // kalau cuma 1 baris: kosongkan saja
                         const row = rows[0];
                         row.querySelectorAll('.line-qty, .line-price').forEach(function(input) {
                             input.value = '';
@@ -359,8 +628,7 @@
                             input.value = '';
                         });
                         row.querySelectorAll('.js-item-suggest-id, .js-item-suggest-category').forEach(
-                            function(
-                                hidden) {
+                            function(hidden) {
                                 hidden.value = '';
                             });
                         const totalCell = row.querySelector('.line-total');
@@ -369,7 +637,7 @@
                         return;
                     }
 
-                    e.target.closest('tr').remove();
+                    btn.closest('tr').remove();
                     renumberLines();
                     recalcAll();
                 }
@@ -384,10 +652,23 @@
                 }
             });
 
-            // Inisialisasi pertama kali
+            tableBody.addEventListener('blur', function(e) {
+                if (
+                    e.target.classList.contains('line-qty') ||
+                    e.target.classList.contains('line-price')
+                ) {
+                    formatInputOnBlur(e.target);
+                }
+            }, true);
+
+            if (shippingInput) {
+                shippingInput.addEventListener('blur', function() {
+                    formatInputOnBlur(shippingInput);
+                });
+            }
+
             recalcAll();
 
-            // Inisialisasi item-suggest awal (kalau script komponen sudah dimuat)
             if (window.initItemSuggestInputs) {
                 window.initItemSuggestInputs();
             }

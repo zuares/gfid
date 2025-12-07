@@ -160,6 +160,12 @@ class PurchaseReceiptController extends Controller
 
     public function createFromOrder(PurchaseOrder $purchase_order)
     {
+        if ($purchase_order->status !== 'approved') {
+            return redirect()
+                ->route('purchasing.purchase_orders.show', $purchase_order->id)
+                ->with('error', 'GRN hanya bisa dibuat dari PO yang sudah di-approve.');
+        }
+
         $purchase_order->load(['supplier', 'lines.item']);
 
         $suppliers = Supplier::orderBy('name')->get();

@@ -2,13 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PurchaseOrder extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'code',
         'date',
@@ -23,65 +22,77 @@ class PurchaseOrder extends Model
         'notes',
         'created_by',
         'approved_by',
+        'approved_at',
+        'cancelled_by',
+        'cancelled_at',
     ];
 
     protected $casts = [
         'date' => 'date',
-        'subtotal' => 'decimal:2',
-        'discount' => 'decimal:2',
-        'tax_percent' => 'decimal:2',
-        'tax_amount' => 'decimal:2',
-        'shipping_cost' => 'decimal:2',
-        'grand_total' => 'decimal:2',
+        'subtotal' => 'float',
+        'discount' => 'float',
+        'tax_percent' => 'float',
+        'tax_amount' => 'float',
+        'shipping_cost' => 'float',
+        'grand_total' => 'float',
+        'approved_at' => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
-    /* ==========================
-     *  RELATIONSHIPS
-     * ==========================
+    /*
+    |--------------------------------------------------------------------------
+    | RELATIONSHIPS
+    |--------------------------------------------------------------------------
      */
 
-    public function supplier()
+    public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
     }
 
-    public function lines()
-    {
-        return $this->hasMany(PurchaseOrderLine::class);
-    }
-
-    public function receives()
-    {
-        return $this->hasMany(PurchaseReceive::class);
-    }
-
-    public function createdBy()
+    public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function approvedBy()
+    public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
 
-    /* ==========================
-     *  HELPER / SCOPE
-     * ==========================
-     */
-
-    public function scopeStatus($query, string $status)
+    public function cancelledBy(): BelongsTo
     {
-        return $query->where('status', $status);
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
+
+    public function lines(): HasMany
+    {
+        return $this->hasMany(PurchaseOrderLine::class);
+    }
+
+    public function purchaseReceipts(): HasMany
+    {
+        return $this->hasMany(PurchaseReceipt::class);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | HELPER STATUS
+    |--------------------------------------------------------------------------
+     */
 
     public function isDraft(): bool
     {
         return $this->status === 'draft';
     }
 
-    public function isReceived(): bool
+    public function isApproved(): bool
     {
-        return $this->status === 'received';
+        return $this->status === 'approved';
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->status === 'cancelled';
     }
 }

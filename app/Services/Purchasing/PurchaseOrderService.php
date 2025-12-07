@@ -103,9 +103,6 @@ class PurchaseOrderService
             if (array_key_exists('notes', $payload)) {
                 $order->notes = $payload['notes'];
             }
-            if (array_key_exists('status', $payload)) {
-                $order->status = $payload['status'];
-            }
 
             $order->save();
 
@@ -275,6 +272,47 @@ class PurchaseOrderService
 
         // Default: biarkan Laravel terjemahkan (mis. "1234.56")
         return (float) $value;
+    }
+
+    public function approve(PurchaseOrder $order, int $approvedBy): PurchaseOrder
+    {
+        return DB::transaction(function () use ($order, $approvedBy) {
+
+            // Safety check
+            if ($order->status !== 'draft') {
+                return $order->fresh(['supplier', 'lines']);
+            }
+
+            $order->status = 'approved';
+            $order->approved_by = $approvedBy;
+            $order->approved_at = now(); // ← NEW
+            $order->save();
+
+            return $order->fresh(['supplier', 'lines']);
+        });
+    }
+
+    public function cancel(PurchaseOrder $order, int $cancelledBy): PurchaseOrder
+    {
+        return DB::transaction(function () use ($order, $cancelledBy) {
+
+            // Hanya boleh cancel kalau status draft / approved
+            if (!in_array($order->status, ['draft', 'approved'], true)) {
+                return $order->fresh(['supplier', 'lines']);
+            }
+
+            // Dilarang cancel kalau sudah ada GRN
+            if ($order->purchaseReceipts()->exists()) {
+                return $order->fresh(['supplier', 'lines', 'purchaseReceipts']);
+            }
+
+            $order->status = 'cancelled';
+            $order->cancelled_by = $cancelledBy;
+            $order->cancelled_at = now();
+            $order->save();
+
+            return $order->fresh(['supplier', 'lines', 'cancelledBy']);
+        });
     }
 
 }
